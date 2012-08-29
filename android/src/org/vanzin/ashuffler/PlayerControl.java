@@ -19,6 +19,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Environment;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.List;
 import java.util.LinkedList;
@@ -46,6 +48,7 @@ class PlayerControl extends Binder
 
     private PlayerState state;
     private MediaPlayer current;
+    private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
 
     public PlayerControl(Context context) {
@@ -60,6 +63,13 @@ class PlayerControl extends Binder
         this.bcastReceiver = new StorageMonitor();
         context.registerReceiver(bcastReceiver, filter);
 
+        state = loadObject(PlayerState.class);
+        if (state == null) {
+            state = new PlayerState();
+        }
+        currentInfo = loadObject(TrackInfo.class);
+        checkFolders();
+
         worker = new Thread(this);
         worker.start();
     }
@@ -69,11 +79,14 @@ class PlayerControl extends Binder
     }
 
     public PlayerState getState() {
-        if (state == null) {
-            state = loadState();
-            checkFolders();
-        }
         return state;
+    }
+
+    public TrackInfo getCurrentInfo() {
+        if (state == null) {
+            getState();
+        }
+        return currentInfo;
     }
 
     public void shutdown() {
@@ -84,7 +97,8 @@ class PlayerControl extends Binder
             Log.warn("Wait interrupted.");
         }
         stop();
-        saveState();
+        saveObject(state);
+        saveObject(currentInfo);
         context.unregisterReceiver(bcastReceiver);
     }
 
@@ -209,9 +223,20 @@ class PlayerControl extends Binder
         mp.setOnCompletionListener(this);
         current = mp;
 
+        // Load track metadata.
+        String track = state.getTracks().get(state.getCurrentTrack());
+        MediaMetadataRetriever md = new MediaMetadataRetriever();
+        try {
+            md.setDataSource(track);
+            TrackInfo tinfo = new TrackInfo(md);
+            currentInfo = tinfo;
+        } finally {
+            md.release();
+        }
+
         Log.debug("startPlayback(): event");
         for (PlayerListener pl : listeners) {
-            pl.playbackStarted(state);
+            pl.playbackStarted(state, currentInfo);
         }
 
         Log.debug("startPlayback(): seeking");
@@ -263,53 +288,9 @@ class PlayerControl extends Binder
                 default:
                     Log.warn("Unknown command: " + cmd);
                 }
-                saveState();
             } catch (InterruptedException ie) {
                 Thread.interrupted();
                 break;
-            }
-        }
-    }
-
-    private PlayerState loadState() {
-        InputStream in = null;
-        try {
-            in = context.openFileInput(".ashuffler");
-            return (PlayerState) new ObjectInputStream(in).readObject();
-        } catch (Exception e) {
-            Log.info("No state file loaded: %s", e.getMessage());
-            return new PlayerState();
-        } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ioe) {
-                    // Ignore.
-                }
-            }
-        }
-    }
-
-    private void saveState() {
-        if (state == null) {
-            return;
-        }
-
-        OutputStream out = null;
-        try {
-            out = context.openFileOutput(".ashuffler", Context.MODE_PRIVATE);
-            ObjectOutputStream oout = new ObjectOutputStream(out);
-            oout.writeObject(state);
-            oout.flush();
-        } catch (Exception e) {
-            Log.info("Cannot save player state: %s", e.getMessage());
-        } finally {
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (IOException ioe) {
-                    // Ignore.
-                }
             }
         }
     }
@@ -322,7 +303,8 @@ class PlayerControl extends Binder
         int pos = current.getCurrentPosition();
         stop();
         state.setTrackPosition(pos);
-        saveState();
+        saveObject(state);
+        saveObject(currentInfo);
     }
 
     private void checkFolders() {
@@ -430,6 +412,53 @@ class PlayerControl extends Binder
         }
         Collections.sort(tracks);
         return tracks;
+    }
+
+    private <T extends Serializable> T loadObject(Class<T> klass) {
+        String fileName = klass.getName();
+
+        InputStream in = null;
+        try {
+            in = context.openFileInput(fileName);
+            return (T) new ObjectInputStream(in).readObject();
+        } catch (Exception e) {
+            Log.info("Cannot load object from file %s: %s", fileName, e.getMessage());
+            return null;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException ioe) {
+                    // Ignore.
+                }
+            }
+        }
+    }
+
+    private void saveObject(Serializable object) {
+        String fileName = object.getClass().getName();
+        if (object == null) {
+            context.deleteFile(fileName);
+            return;
+        }
+
+        OutputStream out = null;
+        try {
+            out = context.openFileOutput(fileName, Context.MODE_PRIVATE);
+            ObjectOutputStream oout = new ObjectOutputStream(out);
+            oout.writeObject(object);
+            oout.flush();
+        } catch (Exception e) {
+            Log.info("Cannot save object %s: %s", fileName, e.getMessage());
+        } finally {
+            if (out != null) {
+                try {
+                    out.close();
+                } catch (IOException ioe) {
+                    // Ignore.
+                }
+            }
+        }
     }
 
     private class StorageMonitor extends BroadcastReceiver {

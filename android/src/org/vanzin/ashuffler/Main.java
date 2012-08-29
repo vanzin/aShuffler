@@ -20,11 +20,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.media.MediaMetadataRetriever;
-import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.View;
+import android.widget.TextView;
 
 import org.vanzin.ashuffler.PlayerControl.Command;
 
@@ -65,6 +64,9 @@ public class Main extends Activity
         Log.debug("Main::CONNECTED");
         control = (PlayerControl) service;
         control.addPlayerListener(this);
+        if (control.getCurrentInfo() != null) {
+            setCurrentTrack(control.getCurrentInfo());
+        }
     }
 
     @Override
@@ -74,22 +76,26 @@ public class Main extends Activity
     }
 
     @Override
-    public void playbackStarted(PlayerState state) {
-        String track = state.getTracks().get(state.getCurrentTrack());
-        MediaMetadataRetriever md = new MediaMetadataRetriever();
-        try {
-            md.setDataSource(track);
-            Log.debug("MAIN:artist = %s",
-                md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST));
-            Log.debug("MAIN:album = %s",
-                md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM));
-            Log.debug("MAIN:trackno = %s",
-                md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
-            Log.debug("MAIN:track = %s",
-                md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE));
-        } finally {
-            md.release();
-        }
+    public void playbackStarted(final PlayerState state,
+                                final TrackInfo info) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                setCurrentTrack(info);
+            }
+        });
+    }
+
+    private void setCurrentTrack(TrackInfo info) {
+        getTextView(R.id.title).setText(info.getTitle());
+        getTextView(R.id.album).setText(info.getAlbum());
+        getTextView(R.id.artist).setText(info.getArtist());
+        getTextView(R.id.trackno).setText(
+            String.format("%d.", info.getTrackNumber()));
+    }
+
+    private TextView getTextView(int id) {
+        return (TextView) findViewById(id);
     }
 
     /* Playback controls. */

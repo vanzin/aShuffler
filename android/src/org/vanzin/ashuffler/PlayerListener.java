@@ -17,7 +17,7 @@ package org.vanzin.ashuffler;
 
 public interface PlayerListener {
 
-    void playbackStarted(PlayerState state);
+    void playbackStarted(PlayerState state, TrackInfo info);
 
 }
 

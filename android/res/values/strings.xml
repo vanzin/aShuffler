@@ -16,7 +16,6 @@ Copyright 2012 Marcelo Vanzin
 -->
 <resources>
     <string name="app_name">Album Shuffler</string>
-    <string name="album">Album</string>
 
     <string name="prev_album">|&lt;</string>
     <string name="prev_track">&lt;</string>

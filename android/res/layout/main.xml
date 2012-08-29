@@ -24,12 +24,87 @@ Copyright 2012 Marcelo Vanzin
 		android:layout_height="wrap_content"
 		android:src="@drawable/nocover"
 		/>
-	<TextView
+
+	<!-- Artist -->
+	<LinearLayout
+		android:orientation="horizontal"
 		android:layout_width="fill_parent"
 		android:layout_height="wrap_content"
-		android:text="@string/album"
-		/>
+		android:gravity="center"
+		>
+		<ImageView
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:adjustViewBounds="true"
+			android:maxHeight="32px"
+			android:maxWidth="32px"
+			android:scaleType="centerInside"
+			android:src="@drawable/artist"
+			/>
+		<TextView
+			android:id="@+id/artist"
+			android:layout_width="fill_parent"
+			android:layout_height="wrap_content"
+			android:text=""
+			/>
+	</LinearLayout>
 
+	<!-- Album -->
+	<LinearLayout
+		android:orientation="horizontal"
+		android:layout_width="fill_parent"
+		android:layout_height="wrap_content"
+		android:gravity="center"
+		>
+		<ImageView
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:adjustViewBounds="true"
+			android:maxHeight="32px"
+			android:maxWidth="32px"
+			android:scaleType="centerInside"
+			android:src="@drawable/album"
+			/>
+		<TextView
+			android:id="@+id/album"
+			android:layout_width="fill_parent"
+			android:layout_height="wrap_content"
+			android:text=""
+			/>
+	</LinearLayout>
+
+	<!-- Track -->
+	<LinearLayout
+		android:orientation="horizontal"
+		android:layout_width="fill_parent"
+		android:layout_height="wrap_content"
+		android:gravity="center"
+		>
+		<ImageView
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:adjustViewBounds="true"
+			android:maxHeight="32px"
+			android:maxWidth="32px"
+			android:scaleType="centerInside"
+			android:src="@drawable/track"
+			/>
+		<TextView
+			android:id="@+id/trackno"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:paddingRight="5px"
+			android:text=""
+			/>
+		<TextView
+			android:id="@+id/title"
+			android:layout_width="fill_parent"
+			android:layout_height="wrap_content"
+			android:text=""
+			/>
+	</LinearLayout>
+
+	<!-- Controls. -->
 	<LinearLayout
 		android:orientation="horizontal"
 		android:layout_width="fill_parent"
