@@ -24,4 +24,5 @@ Copyright 2012 Marcelo Vanzin
     <string name="next_track">&gt;</string>
     <string name="next_album">&gt;|</string>
 
+    <string name="notification_title">aShuffler</string>
 </resources>

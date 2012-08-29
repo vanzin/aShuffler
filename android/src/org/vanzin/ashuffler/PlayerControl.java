@@ -15,6 +15,8 @@
  */
 package org.vanzin.ashuffler;
 
+import android.app.Notification;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -41,18 +43,21 @@ import java.util.concurrent.LinkedBlockingQueue;
 class PlayerControl extends Binder
     implements MediaPlayer.OnCompletionListener, Runnable {
 
-    private final Context context;
+    private static final int ONGOING_NOTIFICATION = 10001;
+
+    private final PlayerService service;
     private final Thread worker;
     private final BlockingQueue<Command> commands;
     private final BroadcastReceiver bcastReceiver;
 
+    private boolean serviceStarted;
     private PlayerState state;
     private MediaPlayer current;
     private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
 
-    public PlayerControl(Context context) {
-        this.context = context;
+    public PlayerControl(PlayerService service) {
+        this.service = service;
         this.listeners = new LinkedList<PlayerListener>();
         this.commands = new LinkedBlockingQueue<Command>();
 
@@ -61,7 +66,7 @@ class PlayerControl extends Binder
         filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
 
         this.bcastReceiver = new StorageMonitor();
-        context.registerReceiver(bcastReceiver, filter);
+        service.registerReceiver(bcastReceiver, filter);
 
         state = loadObject(PlayerState.class);
         if (state == null) {
@@ -99,7 +104,7 @@ class PlayerControl extends Binder
         stop();
         saveObject(state);
         saveObject(currentInfo);
-        context.unregisterReceiver(bcastReceiver);
+        service.unregisterReceiver(bcastReceiver);
     }
 
     public void addPlayerListener(PlayerListener pl) {
@@ -135,6 +140,7 @@ class PlayerControl extends Binder
             } else {
                 current.start();
             }
+            showNotification();
         } else {
             startPlayback();
         }
@@ -149,6 +155,10 @@ class PlayerControl extends Binder
                 current = null;
             }
             state.setTrackPosition(0);
+        }
+        service.stopForeground(true);
+        if (serviceStarted) {
+            service.stopSelf();
         }
     }
 
@@ -234,6 +244,14 @@ class PlayerControl extends Binder
             md.release();
         }
 
+        // Put service in foreground.
+        if (!serviceStarted) {
+            Intent intent = new Intent(service, PlayerService.class);
+            service.startService(intent);
+            serviceStarted = true;
+        }
+        showNotification();
+
         Log.debug("startPlayback(): event");
         for (PlayerListener pl : listeners) {
             pl.playbackStarted(state, currentInfo);
@@ -244,6 +262,22 @@ class PlayerControl extends Binder
             state.getTrackPosition() < mp.getDuration()) {
             mp.seekTo(state.getTrackPosition());
         }
+    }
+
+    private void showNotification() {
+        String state = current.isPlaying() ? "Playing" : "Paused";
+        String msg = String.format("%s: %s - %s",
+            state, currentInfo.getArtist(), currentInfo.getTitle());
+        Notification notification = new Notification(
+            R.drawable.ashuffler, msg, System.currentTimeMillis());
+
+        Intent intent = new Intent(service, Main.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            service, 0, intent, 0);
+        notification.setLatestEventInfo(service,
+            service.getText(R.string.notification_title),
+            msg, pendingIntent);
+        service.startForeground(ONGOING_NOTIFICATION, notification);
     }
 
     @Override
@@ -419,7 +453,7 @@ class PlayerControl extends Binder
 
         InputStream in = null;
         try {
-            in = context.openFileInput(fileName);
+            in = service.openFileInput(fileName);
             return (T) new ObjectInputStream(in).readObject();
         } catch (Exception e) {
             Log.info("Cannot load object from file %s: %s", fileName, e.getMessage());
@@ -438,13 +472,13 @@ class PlayerControl extends Binder
     private void saveObject(Serializable object) {
         String fileName = object.getClass().getName();
         if (object == null) {
-            context.deleteFile(fileName);
+            service.deleteFile(fileName);
             return;
         }
 
         OutputStream out = null;
         try {
-            out = context.openFileOutput(fileName, Context.MODE_PRIVATE);
+            out = service.openFileOutput(fileName, Context.MODE_PRIVATE);
             ObjectOutputStream oout = new ObjectOutputStream(out);
             oout.writeObject(object);
             oout.flush();

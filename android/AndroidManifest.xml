@@ -18,7 +18,7 @@ Copyright 2012 Marcelo Vanzin
       package="org.vanzin.ashuffler"
       android:versionCode="1"
       android:versionName="1.0">
-    <application android:label="@string/app_name" >
+    <application android:icon="@drawable/ashuffler_lg" android:label="@string/app_name" >
         <activity android:name="Main"
                   android:label="@string/app_name">
             <intent-filter>

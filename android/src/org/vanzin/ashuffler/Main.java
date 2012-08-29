@@ -38,9 +38,6 @@ public class Main extends Activity
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-
-        Intent intent = new Intent(this, PlayerService.class);
-        startService(intent);
     }
 
     @Override

@@ -15,41 +15,37 @@
  */
 package org.vanzin.ashuffler;
 
-import android.app.IntentService;
+import android.app.Service;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
 
-public class PlayerService extends IntentService {
+public class PlayerService extends Service {
 
     private PlayerControl control;
 
-    public PlayerService() {
-        super("ShufflePlayerService");
+    @Override
+    public void onCreate() {
     }
 
     @Override
-    protected void onHandleIntent(Intent intent) {
-        init();
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
+        Log.debug("SVC::Destroy()");
         control.shutdown();
         control = null;
     }
 
     @Override
     public IBinder onBind(Intent intent) {
-        init();
-        return control;
-    }
-
-    private synchronized void init() {
         if (control == null) {
             control = new PlayerControl(this);
         }
+        return control;
     }
 
 }
