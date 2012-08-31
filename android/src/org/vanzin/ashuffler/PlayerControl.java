@@ -133,12 +133,19 @@ class PlayerControl extends Binder
         commands.offer(cmd);
     }
 
+    public boolean isPlaying() {
+        MediaPlayer mp = current;
+        return mp != null && mp.isPlaying();
+    }
+
     private void playPause() {
         if (current != null) {
             if (current.isPlaying()) {
                 current.pause();
+                fireTrackStateChange(PlayerListener.TrackState.PAUSE);
             } else {
                 current.start();
+                fireTrackStateChange(PlayerListener.TrackState.PLAY);
             }
             showNotification();
         } else {
@@ -160,6 +167,7 @@ class PlayerControl extends Binder
         if (serviceStarted) {
             service.stopSelf();
         }
+        fireTrackStateChange(PlayerListener.TrackState.STOP);
     }
 
     private void changeFolder(int delta) {
@@ -256,6 +264,7 @@ class PlayerControl extends Binder
         for (PlayerListener pl : listeners) {
             pl.playbackStarted(state, currentInfo);
         }
+        fireTrackStateChange(PlayerListener.TrackState.PLAY);
 
         Log.debug("startPlayback(): seeking");
         if (state.getTrackPosition() > 0 &&
@@ -278,6 +287,12 @@ class PlayerControl extends Binder
             service.getText(R.string.notification_title),
             msg, pendingIntent);
         service.startForeground(ONGOING_NOTIFICATION, notification);
+    }
+
+    private void fireTrackStateChange(PlayerListener.TrackState newState) {
+        for (PlayerListener pl : listeners) {
+            pl.trackStateChanged(state, newState);
+        }
     }
 
     @Override

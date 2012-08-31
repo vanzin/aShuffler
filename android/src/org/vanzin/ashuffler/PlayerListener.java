@@ -17,7 +17,15 @@ package org.vanzin.ashuffler;
 
 public interface PlayerListener {
 
+    public static enum TrackState {
+        PLAY,
+        PAUSE,
+        STOP,
+    }
+
     void playbackStarted(PlayerState state, TrackInfo info);
+
+    void trackStateChanged(PlayerState state, TrackState trackState);
 
 }
 

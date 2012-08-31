@@ -112,40 +112,41 @@ Copyright 2012 Marcelo Vanzin
 		android:gravity="center"
 		>
 
-		<Button
+		<ImageButton
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/prev_album"
+			android:src="@drawable/prev_album"
 			android:onClick="prevAlbum"
 			/>
-		<Button
+		<ImageButton
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/prev_track"
+			android:src="@drawable/prev_track"
 			android:onClick="prevTrack"
 			/>
-		<Button
+		<ImageButton
+			android:id="@+id/play_btn"
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/play_pause"
+			android:src="@drawable/play"
 			android:onClick="playPause"
 			/>
-		<Button
+		<ImageButton
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/stop"
+			android:src="@drawable/stop"
 			android:onClick="stop"
 			/>
-		<Button
+		<ImageButton
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/next_track"
+			android:src="@drawable/next_track"
 			android:onClick="nextTrack"
 			/>
-		<Button
+		<ImageButton
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
-			android:text="@string/next_album"
+			android:src="@drawable/next_album"
 			android:onClick="nextAlbum"
 			/>
 

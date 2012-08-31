@@ -23,6 +23,7 @@ import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import org.vanzin.ashuffler.PlayerControl.Command;
@@ -64,6 +65,7 @@ public class Main extends Activity
         if (control.getCurrentInfo() != null) {
             setCurrentTrack(control.getCurrentInfo());
         }
+        updatePlayButton(control.isPlaying());
     }
 
     @Override
@@ -83,12 +85,32 @@ public class Main extends Activity
         });
     }
 
+    @Override
+    public void trackStateChanged(final PlayerState state,
+                                  final TrackState trackState) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updatePlayButton(trackState == TrackState.PLAY);
+            }
+        });
+    }
+
     private void setCurrentTrack(TrackInfo info) {
         getTextView(R.id.title).setText(info.getTitle());
         getTextView(R.id.album).setText(info.getAlbum());
         getTextView(R.id.artist).setText(info.getArtist());
         getTextView(R.id.trackno).setText(
             String.format("%d.", info.getTrackNumber()));
+    }
+
+    private void updatePlayButton(boolean isPlaying) {
+        ImageButton playBtn = (ImageButton) findViewById(R.id.play_btn);
+        if (isPlaying) {
+            playBtn.setImageResource(R.drawable.pause);
+        } else {
+            playBtn.setImageResource(R.drawable.play);
+        }
     }
 
     private TextView getTextView(int id) {
