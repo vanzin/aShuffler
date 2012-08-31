@@ -18,10 +18,13 @@ Copyright 2012 Marcelo Vanzin
     android:orientation="vertical"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
+    android:gravity="center"
     >
 	<ImageView
-		android:layout_width="fill_parent"
-		android:layout_height="wrap_content"
+		android:id="@+id/cover"
+		android:layout_width="300px"
+		android:layout_height="300px"
+		android:scaleType="fitXY"
 		android:src="@drawable/nocover"
 		/>
 

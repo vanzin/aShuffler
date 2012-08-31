@@ -28,6 +28,7 @@ class TrackInfo implements Serializable {
     private final String artist;
     private final int trackNumber;
     private final int discNumber;
+    private String artwork;
 
     public TrackInfo(MediaMetadataRetriever md) {
         this.title =
@@ -66,6 +67,14 @@ class TrackInfo implements Serializable {
 
     public int getDiscNumber() {
         return discNumber;
+    }
+
+    public String getArtwork() {
+        return artwork;
+    }
+
+    public void setArtwork(String artwork) {
+        this.artwork = artwork;
     }
 
 }

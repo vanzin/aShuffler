@@ -22,9 +22,13 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.net.Uri;
 import android.view.View;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
+
+import java.io.File;
 
 import org.vanzin.ashuffler.PlayerControl.Command;
 
@@ -32,6 +36,7 @@ public class Main extends Activity
     implements PlayerListener, ServiceConnection
 {
     private PlayerControl control;
+    private String currentArtwork;
 
     /** Called when the activity is first created. */
     @Override
@@ -102,6 +107,16 @@ public class Main extends Activity
         getTextView(R.id.artist).setText(info.getArtist());
         getTextView(R.id.trackno).setText(
             String.format("%d.", info.getTrackNumber()));
+
+        ImageView cover = (ImageView) findViewById(R.id.cover);
+        if (info.getArtwork() != null) {
+            if (!info.getArtwork().equals(currentArtwork)) {
+                Uri uri = Uri.fromFile(new File(info.getArtwork()));
+                cover.setImageURI(uri);
+            }
+        } else {
+            cover.setImageResource(R.drawable.nocover);
+        }
     }
 
     private void updatePlayButton(boolean isPlaying) {

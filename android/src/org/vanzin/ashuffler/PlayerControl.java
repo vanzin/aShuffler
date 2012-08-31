@@ -22,9 +22,12 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
 import android.media.AudioManager;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
+import android.provider.MediaStore.Audio.Albums;
+import android.provider.MediaStore.Audio.AlbumColumns;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.IBinder;
@@ -262,9 +265,37 @@ class PlayerControl extends Binder
         try {
             md.setDataSource(track);
             TrackInfo tinfo = new TrackInfo(md);
+            if (tinfo.getAlbum().equals(currentInfo.getAlbum())) {
+                tinfo.setArtwork(currentInfo.getArtwork());
+            }
             currentInfo = tinfo;
         } finally {
             md.release();
+        }
+
+        // Load artwork for album.
+        if (currentInfo.getArtwork() == null) {
+            try {
+                String criteria = String.format("%s = '%s' AND %s = '%s'",
+                    AlbumColumns.ARTIST, currentInfo.getArtist(),
+                    AlbumColumns.ALBUM, currentInfo.getAlbum());
+
+                Cursor cursor = service.getContentResolver().query(
+                    Albums.EXTERNAL_CONTENT_URI,
+                    new String[] { AlbumColumns.ALBUM_ART },
+                    criteria,
+                    null,
+                    null);
+                if (cursor != null) {
+                    cursor.moveToFirst();
+                    currentInfo.setArtwork(cursor.getString(0));
+                } else {
+                    currentInfo.setArtwork(null);
+                }
+            } catch (Exception e) {
+                Log.warn("Error querying artwork: %s: %s",
+                    e.getClass().getName(), e.getMessage());
+            }
         }
 
         // Put service in foreground.
