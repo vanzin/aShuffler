@@ -21,6 +21,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.AudioManager;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Binder;
@@ -41,7 +42,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 class PlayerControl extends Binder
-    implements MediaPlayer.OnCompletionListener, Runnable {
+    implements AudioManager.OnAudioFocusChangeListener,
+               MediaPlayer.OnCompletionListener,
+               Runnable {
 
     private static final int ONGOING_NOTIFICATION = 10001;
 
@@ -49,7 +52,9 @@ class PlayerControl extends Binder
     private final Thread worker;
     private final BlockingQueue<Command> commands;
     private final BroadcastReceiver bcastReceiver;
+    private final AudioManager audioManager;
 
+    private boolean pausedByFocusLoss;
     private boolean serviceStarted;
     private PlayerState state;
     private MediaPlayer current;
@@ -60,6 +65,8 @@ class PlayerControl extends Binder
         this.service = service;
         this.listeners = new LinkedList<PlayerListener>();
         this.commands = new LinkedBlockingQueue<Command>();
+        this.audioManager = (AudioManager)
+            service.getSystemService(Context.AUDIO_SERVICE);
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_EJECT);
@@ -124,8 +131,10 @@ class PlayerControl extends Binder
         PREV_FOLDER,
         PREV_TRACK,
         PLAY_PAUSE,
+        SET_AUDIO_FOCUS,
         STOP,
         STOP_AND_SAVE,
+        UNSET_AUDIO_FOCUS,
     }
 
     public void runCommand(Command cmd) {
@@ -148,6 +157,7 @@ class PlayerControl extends Binder
                 fireTrackStateChange(PlayerListener.TrackState.PLAY);
             }
             showNotification();
+            pausedByFocusLoss = false;
         } else {
             startPlayback();
         }
@@ -168,6 +178,7 @@ class PlayerControl extends Binder
             service.stopSelf();
         }
         fireTrackStateChange(PlayerListener.TrackState.STOP);
+        pausedByFocusLoss = false;
     }
 
     private void changeFolder(int delta) {
@@ -271,6 +282,7 @@ class PlayerControl extends Binder
             state.getTrackPosition() < mp.getDuration()) {
             mp.seekTo(state.getTrackPosition());
         }
+        pausedByFocusLoss = false;
     }
 
     private void showNotification() {
@@ -295,15 +307,48 @@ class PlayerControl extends Binder
         }
     }
 
+    private void setAudioFocus(boolean focused) {
+        if (focused) {
+            if (pausedByFocusLoss) {
+                if (current != null) {
+                    Log.debug("Resuming on audio focus gain.");
+                    current.start();
+                    fireTrackStateChange(PlayerListener.TrackState.PLAY);
+                }
+                pausedByFocusLoss = false;
+            }
+        } else {
+            if (current != null && current.isPlaying()) {
+                Log.debug("Pausing on audio focus loss.");
+                current.pause();
+                fireTrackStateChange(PlayerListener.TrackState.PAUSE);
+                pausedByFocusLoss = true;
+            }
+        }
+    }
+
     @Override
     public void onCompletion(MediaPlayer mp) {
         runCommand(Command.NEXT_TRACK);
     }
 
     @Override
+    public void onAudioFocusChange(int focusChange) {
+        if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
+            runCommand(Command.SET_AUDIO_FOCUS);
+        } else {
+            runCommand(Command.UNSET_AUDIO_FOCUS);
+        }
+    }
+
+    @Override
     public void run() {
         // Make sure the state is loaded.
         getState();
+
+        audioManager.requestAudioFocus(this,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN);
 
         while (true) {
             try {
@@ -328,11 +373,17 @@ class PlayerControl extends Binder
                 case PLAY_PAUSE:
                     playPause();
                     break;
+                case SET_AUDIO_FOCUS:
+                    setAudioFocus(true);
+                    break;
                 case STOP:
                     stop();
                     break;
                 case STOP_AND_SAVE:
                     stopAndSave();
+                    break;
+                case UNSET_AUDIO_FOCUS:
+                    setAudioFocus(false);
                     break;
                 default:
                     Log.warn("Unknown command: " + cmd);
