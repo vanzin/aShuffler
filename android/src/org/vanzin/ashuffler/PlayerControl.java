@@ -18,6 +18,7 @@ package org.vanzin.ashuffler;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -53,6 +54,7 @@ class PlayerControl extends Binder
     private final BlockingQueue<Command> commands;
     private final BroadcastReceiver bcastReceiver;
     private final AudioManager audioManager;
+    private final ComponentName remoteControl;
 
     private boolean pausedByFocusLoss;
     private boolean serviceStarted;
@@ -67,6 +69,8 @@ class PlayerControl extends Binder
         this.commands = new LinkedBlockingQueue<Command>();
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
+        this.remoteControl = new ComponentName(service.getPackageName(),
+            RemoteControlMonitor.class.getName());
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_EJECT);
@@ -317,6 +321,7 @@ class PlayerControl extends Binder
                 }
                 pausedByFocusLoss = false;
             }
+            audioManager.registerMediaButtonEventReceiver(remoteControl);
         } else {
             if (current != null && current.isPlaying()) {
                 Log.debug("Pausing on audio focus loss.");
@@ -324,6 +329,7 @@ class PlayerControl extends Binder
                 fireTrackStateChange(PlayerListener.TrackState.PAUSE);
                 pausedByFocusLoss = true;
             }
+            audioManager.unregisterMediaButtonEventReceiver(remoteControl);
         }
     }
 
@@ -346,9 +352,12 @@ class PlayerControl extends Binder
         // Make sure the state is loaded.
         getState();
 
-        audioManager.requestAudioFocus(this,
+        int ret = audioManager.requestAudioFocus(this,
             AudioManager.STREAM_MUSIC,
             AudioManager.AUDIOFOCUS_GAIN);
+        if (ret == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            audioManager.registerMediaButtonEventReceiver(remoteControl);
+        }
 
         while (true) {
             try {

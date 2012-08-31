@@ -30,6 +30,15 @@ public class PlayerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent.getAction() != null) {
+            try {
+                PlayerControl.Command cmd =
+                    PlayerControl.Command.valueOf(intent.getAction());
+                control.runCommand(cmd);
+            } catch (IllegalArgumentException e) {
+                Log.info("Unrecognized intent: %s.", intent.getAction());
+            }
+        }
         return START_STICKY;
     }
 

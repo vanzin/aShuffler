@@ -28,5 +28,10 @@ Copyright 2012 Marcelo Vanzin
         </activity>
 		<service android:name=".PlayerService" />
 	</application>
+	<receiver android:name=".RemoteControlMonitor">
+		<intent-filter>
+			<action android:name="android.intent.action.MEDIA_BUTTON" />
+		</intent-filter>
+    </receiver>
 </manifest>
 
