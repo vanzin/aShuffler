@@ -19,6 +19,13 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
+/**
+ * The player state.
+ * <p>
+ * This class holds information about the known folders in the
+ * phone's Music directory and the current folder / track being
+ * played.
+ */
 class PlayerState implements Serializable {
 
     public static final long serialVersionUID = 3999248501740180351L;

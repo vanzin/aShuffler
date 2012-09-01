@@ -20,6 +20,17 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
 
+/**
+ * Service for playing back media.
+ * <p>
+ * This service handles the playback of the media, and dispatching
+ * commands to the {@link PlayerControl} class. Intents sent to the
+ * service that match a valid value in the {@link PlayerControl#Command}
+ * class are delivered for asynchronous processing.
+ * <p>
+ * The {@link PlayerControl} instance can be retrieved by binding to
+ * the service.
+ */
 public class PlayerService extends Service {
 
     private PlayerControl control;

@@ -45,6 +45,42 @@ import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+/**
+ * Main media player control class.
+ * <p>
+ * This class takes care of all the logic related to keeping the list
+ * of things to be played, to responding to system events. It can be
+ * retrieved by binding to PlayerService.
+ * <p>
+ * Interaction with the control is done by enqueueing commands by
+ * calling {@link #runCommand(Command)}. Commands are handled
+ * sequentially in a separate worker thread, as to not block the
+ * caller.
+ * <p>
+ * Interesting behaviors include:
+ *
+ * <ul>
+ *   <li>Loading track metadata.</li>
+ *   <li>Monitoring storage state and checking when the monitored
+ *   folders change.</li>
+ *   <li>Responding to audio focus events so playback is played
+ *   when incoming calls are coming (or other similar events).</li>
+ *   <li>Scrobbling track info using the Scrobble Droid API.</li>
+ *   <li>Sending events to interested listeners.</li>
+ *   <li>Controlling service state based on the playback state.</li>
+ * </ul>
+ *
+ * Notably, this class will keep the service running in the foreground
+ * while playback is active (either playing or paused). This will cause
+ * a notification to be active. When stopped, the service will be sent
+ * to the background, and will only remain active in case there are
+ * bound activities.
+ * <p>
+ * There are two state files kept by this class. One is the serialized
+ * PlayerState, which contains the shuffled folders to be player. The
+ * other is the serialized TrackInfo, which is the current track being
+ * played.
+ */
 class PlayerControl extends Binder
     implements AudioManager.OnAudioFocusChangeListener,
                MediaPlayer.OnCompletionListener,
@@ -66,6 +102,11 @@ class PlayerControl extends Binder
     private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
 
+    /**
+     * Initializes the player control.
+     * <p>
+     * Set up the storage monitor, and load all saved state.
+     */
     public PlayerControl(PlayerService service) {
         this.service = service;
         this.listeners = new LinkedList<PlayerListener>();
@@ -93,14 +134,30 @@ class PlayerControl extends Binder
         worker.start();
     }
 
+    /**
+     * Get the current MediaPlayer instance.
+     * <p>
+     * Note that this is not thread-safe.
+     */
     public MediaPlayer getPlayer() {
         return current;
     }
 
+    /**
+     * Return the current player state.
+     * <p>
+     * The player state is not thread-safe. It's not recommended
+     * to have other classes modify it.
+     */
     public PlayerState getState() {
         return state;
     }
 
+    /**
+     * Get the current playing track's info.
+     * <p>
+     * As with other "getters", not thread-safe.
+     */
     public TrackInfo getCurrentInfo() {
         if (state == null) {
             getState();
@@ -108,6 +165,11 @@ class PlayerControl extends Binder
         return currentInfo;
     }
 
+    /**
+     * Shutdown the player.
+     * <p>
+     * Stop the worker thread, stop playback, and save all state.
+     */
     public void shutdown() {
         worker.interrupt();
         try {
@@ -131,6 +193,9 @@ class PlayerControl extends Binder
 
     /* Playback control. */
 
+    /**
+     * Commands available for enqueueing.
+     */
     public static enum Command {
         CHECK_FOLDERS,
         NEXT_FOLDER,
@@ -144,11 +209,23 @@ class PlayerControl extends Binder
         UNSET_AUDIO_FOCUS,
     }
 
+    /**
+     * Enqueue a command for execution.
+     * <p>
+     * Returns immediately. Command is executed asynchronous and there
+     * is no way to monitor completion, unless it causes some
+     * side-effect (like starting playback, which fires an event).
+     */
     public void runCommand(Command cmd) {
         Log.debug("RUN: %s", cmd.name());
         commands.offer(cmd);
     }
 
+    /**
+     * Returns whether media is playing.
+     * <p>
+     * Not thread-safe either.
+     */
     public boolean isPlaying() {
         MediaPlayer mp = current;
         return mp != null && mp.isPlaying();
@@ -365,6 +442,13 @@ class PlayerControl extends Binder
         }
     }
 
+    /**
+     * Scrobble Droid support.
+     * <p>
+     * See: http://code.google.com/p/scrobbledroid/wiki/DeveloperAPI
+     *
+     * @param playing Whether the current track is playing.
+     */
     private void scrobble(boolean playing) {
         Intent i = new Intent("net.jjc1138.android.scrobbler.action.MUSIC_STATUS");
         i.putExtra("playing", playing);
@@ -609,6 +693,12 @@ class PlayerControl extends Binder
         }
     }
 
+    /**
+     * Monitor for storage events.
+     * <p>
+     * Stops playback when the SD card is unmounted, and re-check
+     * the folder list when it's mounted (but does not resume playback).
+     */
     private class StorageMonitor extends BroadcastReceiver {
 
         @Override

@@ -20,6 +20,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.view.KeyEvent;
 
+/**
+ * Monitor for media button events.
+ * <p>
+ * This receiver is installed to respond to MEDIA_BUTTON intents,
+ * and responds to the "play" button in headsets to trigger the
+ * play/pause action in PlayerControl.
+ */
 public class RemoteControlMonitor extends BroadcastReceiver {
 
     @Override

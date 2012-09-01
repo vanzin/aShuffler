@@ -19,6 +19,12 @@ import android.media.MediaMetadataRetriever;
 
 import java.io.Serializable;
 
+/**
+ * Information about the current track being played.
+ * <p>
+ * Caches the tags from the track that the player's UI and notifications
+ * use, to avoid having to re-fetch them.
+ */
 class TrackInfo implements Serializable {
 
     public static final long serialVersionUID = 4735383483858487457L;

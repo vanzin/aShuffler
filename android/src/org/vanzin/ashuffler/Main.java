@@ -33,6 +33,12 @@ import java.io.File;
 
 import org.vanzin.ashuffler.PlayerControl.Command;
 
+/**
+ * Main activity class.
+ * <p>
+ * Shows the main UI, binds to PlayerService, and listens to playback
+ * events.
+ */
 public class Main extends Activity
     implements PlayerListener, ServiceConnection
 {
