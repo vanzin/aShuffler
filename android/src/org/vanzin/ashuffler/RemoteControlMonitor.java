@@ -24,11 +24,10 @@ public class RemoteControlMonitor extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
-            KeyEvent event = (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
-            if (KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE == event.getKeyCode()) {
-                playPause(context);
-            }
+        KeyEvent event = (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+        if (KeyEvent.KEYCODE_HEADSETHOOK == event.getKeyCode() &&
+            KeyEvent.ACTION_UP == event.getAction()) {
+            playPause(context);
         }
     }
 

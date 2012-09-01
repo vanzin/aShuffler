@@ -265,7 +265,7 @@ class PlayerControl extends Binder
         try {
             md.setDataSource(track);
             TrackInfo tinfo = new TrackInfo(md);
-            if (tinfo.getAlbum().equals(currentInfo.getAlbum())) {
+            if (currentInfo != null && tinfo.getAlbum().equals(currentInfo.getAlbum())) {
                 tinfo.setArtwork(currentInfo.getArtwork());
             }
             currentInfo = tinfo;
@@ -352,7 +352,6 @@ class PlayerControl extends Binder
                 }
                 pausedByFocusLoss = false;
             }
-            audioManager.registerMediaButtonEventReceiver(remoteControl);
         } else {
             if (current != null && current.isPlaying()) {
                 Log.debug("Pausing on audio focus loss.");
@@ -360,7 +359,6 @@ class PlayerControl extends Binder
                 fireTrackStateChange(PlayerListener.TrackState.PAUSE);
                 pausedByFocusLoss = true;
             }
-            audioManager.unregisterMediaButtonEventReceiver(remoteControl);
         }
     }
 
@@ -383,12 +381,9 @@ class PlayerControl extends Binder
         // Make sure the state is loaded.
         getState();
 
-        int ret = audioManager.requestAudioFocus(this,
+        audioManager.requestAudioFocus(this,
             AudioManager.STREAM_MUSIC,
             AudioManager.AUDIOFOCUS_GAIN);
-        if (ret == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            audioManager.registerMediaButtonEventReceiver(remoteControl);
-        }
 
         while (true) {
             try {

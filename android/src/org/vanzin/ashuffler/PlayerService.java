@@ -30,6 +30,7 @@ public class PlayerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        init();
         if (intent.getAction() != null) {
             try {
                 PlayerControl.Command cmd =
@@ -51,10 +52,14 @@ public class PlayerService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
+        init();
+        return control;
+    }
+
+    private synchronized void init() {
         if (control == null) {
             control = new PlayerControl(this);
         }
-        return control;
     }
 
 }
