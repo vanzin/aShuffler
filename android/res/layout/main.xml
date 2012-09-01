@@ -39,8 +39,8 @@ Copyright 2012 Marcelo Vanzin
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:adjustViewBounds="true"
-			android:maxHeight="32px"
-			android:maxWidth="32px"
+			android:maxHeight="16px"
+			android:maxWidth="16px"
 			android:scaleType="centerInside"
 			android:src="@drawable/artist"
 			/>
@@ -63,8 +63,8 @@ Copyright 2012 Marcelo Vanzin
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:adjustViewBounds="true"
-			android:maxHeight="32px"
-			android:maxWidth="32px"
+			android:maxHeight="16px"
+			android:maxWidth="16px"
 			android:scaleType="centerInside"
 			android:src="@drawable/album"
 			/>
@@ -87,8 +87,8 @@ Copyright 2012 Marcelo Vanzin
 			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:adjustViewBounds="true"
-			android:maxHeight="32px"
-			android:maxWidth="32px"
+			android:maxHeight="16px"
+			android:maxWidth="16px"
 			android:scaleType="centerInside"
 			android:src="@drawable/track"
 			/>
