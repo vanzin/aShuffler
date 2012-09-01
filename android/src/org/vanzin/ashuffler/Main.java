@@ -20,6 +20,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.net.Uri;
@@ -60,6 +61,11 @@ public class Main extends Activity
             control.removePlayerListener(this);
         }
         unbindService(this);
+    }
+
+    @Override
+    public void onConfigurationChanged (Configuration newConfig) {
+
     }
 
     @Override
