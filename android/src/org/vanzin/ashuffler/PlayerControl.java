@@ -115,7 +115,7 @@ class PlayerControl extends Binder
         } catch (InterruptedException ie) {
             Log.warn("Wait interrupted.");
         }
-        stop();
+        stop(true);
         saveObject(state);
         saveObject(currentInfo);
         service.unregisterReceiver(bcastReceiver);
@@ -170,7 +170,7 @@ class PlayerControl extends Binder
         }
     }
 
-    private void stop() {
+    private void stop(boolean mayStopService) {
         if (current != null) {
             try {
                 current.stop();
@@ -179,9 +179,10 @@ class PlayerControl extends Binder
                 current = null;
             }
             state.setTrackPosition(0);
+            scrobble(false);
         }
         service.stopForeground(true);
-        if (serviceStarted) {
+        if (mayStopService && serviceStarted) {
             service.stopSelf();
         }
         fireTrackStateChange(PlayerListener.TrackState.STOP);
@@ -237,6 +238,7 @@ class PlayerControl extends Binder
 
     private void startPlayback() {
         Log.debug("startPlayback()");
+
         // Prepare the next track.
         MediaPlayer mp = new MediaPlayer();
         try {
@@ -251,7 +253,7 @@ class PlayerControl extends Binder
 
         // Stop the current track.
         Log.debug("startPlayback(): stopping");
-        stop();
+        stop(false);
 
         // Start playback.
         Log.debug("startPlayback(): starting");
@@ -264,7 +266,7 @@ class PlayerControl extends Binder
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
             md.setDataSource(track);
-            TrackInfo tinfo = new TrackInfo(md);
+            TrackInfo tinfo = new TrackInfo(md, current.getDuration());
             if (currentInfo != null && tinfo.getAlbum().equals(currentInfo.getAlbum())) {
                 tinfo.setArtwork(currentInfo.getArtwork());
             }
@@ -318,6 +320,7 @@ class PlayerControl extends Binder
             mp.seekTo(state.getTrackPosition());
         }
         pausedByFocusLoss = false;
+        scrobble(true);
     }
 
     private void showNotification() {
@@ -360,6 +363,16 @@ class PlayerControl extends Binder
                 pausedByFocusLoss = true;
             }
         }
+    }
+
+    private void scrobble(boolean playing) {
+        Intent i = new Intent("net.jjc1138.android.scrobbler.action.MUSIC_STATUS");
+        i.putExtra("playing", playing);
+        i.putExtra("artist", currentInfo.getArtist());
+        i.putExtra("track", currentInfo.getTitle());
+        i.putExtra("album", currentInfo.getAlbum());
+        i.putExtra("secs", currentInfo.getDuration());
+        service.sendBroadcast(i);
     }
 
     @Override
@@ -412,7 +425,7 @@ class PlayerControl extends Binder
                     setAudioFocus(true);
                     break;
                 case STOP:
-                    stop();
+                    stop(true);
                     break;
                 case STOP_AND_SAVE:
                     stopAndSave();
@@ -436,7 +449,7 @@ class PlayerControl extends Binder
         }
 
         int pos = current.getCurrentPosition();
-        stop();
+        stop(true);
         state.setTrackPosition(pos);
         saveObject(state);
         saveObject(currentInfo);

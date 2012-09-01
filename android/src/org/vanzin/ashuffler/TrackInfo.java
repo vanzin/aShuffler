@@ -21,16 +21,17 @@ import java.io.Serializable;
 
 class TrackInfo implements Serializable {
 
-    public static final long serialVersionUID = 4735383483858487456L;
+    public static final long serialVersionUID = 4735383483858487457L;
 
     private final String title;
     private final String album;
     private final String artist;
     private final int trackNumber;
     private final int discNumber;
+    private final int duration;
     private String artwork;
 
-    public TrackInfo(MediaMetadataRetriever md) {
+    public TrackInfo(MediaMetadataRetriever md, int duration) {
         this.title =
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
         this.album =
@@ -39,6 +40,7 @@ class TrackInfo implements Serializable {
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
         this.trackNumber = Integer.parseInt(
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
+        this.duration = duration;
 
         String discNumberStr =
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER);
@@ -67,6 +69,10 @@ class TrackInfo implements Serializable {
 
     public int getDiscNumber() {
         return discNumber;
+    }
+
+    public int getDuration() {
+        return duration;
     }
 
     public String getArtwork() {
