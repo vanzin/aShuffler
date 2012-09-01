@@ -92,6 +92,7 @@ class PlayerControl extends Binder
     private final Thread worker;
     private final BlockingQueue<Command> commands;
     private final BroadcastReceiver bcastReceiver;
+    private final BroadcastReceiver headsetReceiver;
     private final AudioManager audioManager;
     private final ComponentName remoteControl;
 
@@ -116,12 +117,19 @@ class PlayerControl extends Binder
         this.remoteControl = new ComponentName(service.getPackageName(),
             RemoteControlMonitor.class.getName());
 
+        // Instantiate the storage broadcast receiver.
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_EJECT);
         filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
 
         this.bcastReceiver = new StorageMonitor();
         service.registerReceiver(bcastReceiver, filter);
+
+        // Instantiate the headset broadcast receiver.
+        filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_HEADSET_PLUG);
+        this.headsetReceiver = new HeadsetMonitor();
+        service.registerReceiver(headsetReceiver, filter);
 
         state = loadObject(PlayerState.class);
         if (state == null) {
@@ -181,6 +189,7 @@ class PlayerControl extends Binder
         saveObject(state);
         saveObject(currentInfo);
         service.unregisterReceiver(bcastReceiver);
+        service.unregisterReceiver(headsetReceiver);
     }
 
     public void addPlayerListener(PlayerListener pl) {
@@ -200,6 +209,7 @@ class PlayerControl extends Binder
         CHECK_FOLDERS,
         NEXT_FOLDER,
         NEXT_TRACK,
+        PAUSE,
         PREV_FOLDER,
         PREV_TRACK,
         PLAY_PAUSE,
@@ -229,6 +239,14 @@ class PlayerControl extends Binder
     public boolean isPlaying() {
         MediaPlayer mp = current;
         return mp != null && mp.isPlaying();
+    }
+
+    private void pause() {
+        if (current != null && current.isPlaying()) {
+            current.pause();
+            fireTrackStateChange(PlayerListener.TrackState.PAUSE);
+            showNotification();
+        }
     }
 
     private void playPause() {
@@ -496,6 +514,9 @@ class PlayerControl extends Binder
                 case NEXT_TRACK:
                     changeTrack(1);
                     break;
+                case PAUSE:
+                    pause();
+                    break;
                 case PREV_FOLDER:
                     changeFolder(-1);
                     break;
@@ -712,5 +733,22 @@ class PlayerControl extends Binder
 
     }
 
-}
+    /**
+     * Monitor for headset events.
+     * <p>
+     * Pause playback if the headset is unplugged.
+     */
+    private class HeadsetMonitor extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int state = intent.getIntExtra("state", 0);
+            if (state == 0) {
+                runCommand(Command.PAUSE);
+            }
+        }
+
+    }
+
+ }
 
