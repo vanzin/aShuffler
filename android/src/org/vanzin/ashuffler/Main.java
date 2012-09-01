@@ -113,6 +113,8 @@ public class Main extends Activity
             if (!info.getArtwork().equals(currentArtwork)) {
                 Uri uri = Uri.fromFile(new File(info.getArtwork()));
                 cover.setImageURI(uri);
+            } else if (!new File(info.getArtwork()).exists()) {
+                cover.setImageResource(R.drawable.nocover);
             }
         } else {
             cover.setImageResource(R.drawable.nocover);
