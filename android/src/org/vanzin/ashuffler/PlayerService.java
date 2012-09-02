@@ -56,7 +56,6 @@ public class PlayerService extends Service {
 
     @Override
     public void onDestroy() {
-        Log.debug("SVC::Destroy()");
         control.shutdown();
         control = null;
     }

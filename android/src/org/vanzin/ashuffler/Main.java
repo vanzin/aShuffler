@@ -76,7 +76,6 @@ public class Main extends Activity
 
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
-        Log.debug("Main::CONNECTED");
         control = (PlayerControl) service;
         control.addPlayerListener(this);
         if (control.getCurrentInfo() != null) {
@@ -87,7 +86,6 @@ public class Main extends Activity
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        Log.debug("Main::DISCONNECTED");
         control = null;
     }
 

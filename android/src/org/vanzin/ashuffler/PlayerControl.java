@@ -227,7 +227,6 @@ class PlayerControl extends Binder
      * side-effect (like starting playback, which fires an event).
      */
     public void runCommand(Command cmd) {
-        Log.debug("RUN: %s", cmd.name());
         commands.offer(cmd);
     }
 
@@ -332,14 +331,12 @@ class PlayerControl extends Binder
     }
 
     private void startPlayback() {
-        Log.debug("startPlayback()");
 
         // Prepare the next track.
         MediaPlayer mp = new MediaPlayer();
         try {
             mp.setDataSource(state.getTracks().get(state.getCurrentTrack()));
             mp.prepare();
-            Log.debug("startPlayback(): prepared");
         } catch (IOException ioe) {
             Log.warn("Cannot load new track: %s", ioe.getMessage());
             mp.release();
@@ -347,11 +344,9 @@ class PlayerControl extends Binder
         }
 
         // Stop the current track.
-        Log.debug("startPlayback(): stopping");
         stop(false);
 
         // Start playback.
-        Log.debug("startPlayback(): starting");
         mp.start();
         mp.setOnCompletionListener(this);
         current = mp;
@@ -403,13 +398,11 @@ class PlayerControl extends Binder
         }
         showNotification();
 
-        Log.debug("startPlayback(): event");
         for (PlayerListener pl : listeners) {
             pl.playbackStarted(state, currentInfo);
         }
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
 
-        Log.debug("startPlayback(): seeking");
         if (state.getTrackPosition() > 0 &&
             state.getTrackPosition() < mp.getDuration()) {
             mp.seekTo(state.getTrackPosition());
@@ -444,7 +437,6 @@ class PlayerControl extends Binder
         if (focused) {
             if (pausedByFocusLoss) {
                 if (current != null) {
-                    Log.debug("Resuming on audio focus gain.");
                     current.start();
                     fireTrackStateChange(PlayerListener.TrackState.PLAY);
                 }
@@ -452,7 +444,6 @@ class PlayerControl extends Binder
             }
         } else {
             if (current != null && current.isPlaying()) {
-                Log.debug("Pausing on audio focus loss.");
                 current.pause();
                 fireTrackStateChange(PlayerListener.TrackState.PAUSE);
                 pausedByFocusLoss = true;
@@ -503,7 +494,6 @@ class PlayerControl extends Binder
         while (true) {
             try {
                 Command cmd = commands.take();
-                Log.debug("CMD: %s", cmd.name());
                 switch (cmd) {
                 case CHECK_FOLDERS:
                     checkFolders();
