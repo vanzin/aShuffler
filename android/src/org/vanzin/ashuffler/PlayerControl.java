@@ -94,6 +94,7 @@ class PlayerControl extends Binder
     private final BlockingQueue<Intent> commands;
     private final BroadcastReceiver bcastReceiver;
     private final BroadcastReceiver headsetReceiver;
+    private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
     private final ComponentName remoteControl;
 
@@ -131,6 +132,12 @@ class PlayerControl extends Binder
         filter.addAction(Intent.ACTION_HEADSET_PLUG);
         this.headsetReceiver = new HeadsetMonitor();
         service.registerReceiver(headsetReceiver, filter);
+
+        // Instantiate the shutdown broadcast receiver.
+        filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_SHUTDOWN);
+        this.shutdownReceiver = new ShutdownMonitor();
+        service.registerReceiver(shutdownReceiver, filter);
 
         state = loadObject(PlayerState.class);
         if (state == null) {
@@ -207,6 +214,7 @@ class PlayerControl extends Binder
         saveObject(currentInfo);
         service.unregisterReceiver(bcastReceiver);
         service.unregisterReceiver(headsetReceiver);
+        service.unregisterReceiver(shutdownReceiver);
     }
 
     public void addPlayerListener(PlayerListener pl) {
@@ -608,15 +616,15 @@ class PlayerControl extends Binder
     }
 
     private void stopAndSave() {
-        if (current == null) {
-            return;
+        TrackInfo trackInfo = currentInfo;
+        if (current != null) {
+            int pos = current.getCurrentPosition();
+            stop(true);
+            state.setTrackPosition(pos);
+            saveObject(currentInfo);
         }
-
-        int pos = current.getCurrentPosition();
-        stop(true);
-        state.setTrackPosition(pos);
         saveObject(state);
-        saveObject(currentInfo);
+        saveObject(trackInfo);
     }
 
     private void checkFolders() {
@@ -805,6 +813,21 @@ class PlayerControl extends Binder
             if (state == 0) {
                 runCommand(Command.PAUSE);
             }
+        }
+
+    }
+
+    /**
+     * Monitor for shutdown events.
+     * <p>
+     * Saves the player state and stops the service when shutting
+     * down.
+     */
+    private class ShutdownMonitor extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            runCommand(Command.STOP_AND_SAVE);
         }
 
     }
