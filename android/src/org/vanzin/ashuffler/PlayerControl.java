@@ -266,6 +266,7 @@ class PlayerControl extends Binder
 
     private void stop(boolean mayStopService) {
         if (current != null) {
+            scrobble(false);
             try {
                 current.stop();
             } finally {
@@ -273,7 +274,6 @@ class PlayerControl extends Binder
                 current = null;
             }
             state.setTrackPosition(0);
-            scrobble(false);
         }
         service.stopForeground(true);
         if (mayStopService && serviceStarted) {
@@ -331,11 +331,12 @@ class PlayerControl extends Binder
     }
 
     private void startPlayback() {
+        String track = state.getTracks().get(state.getCurrentTrack());
 
         // Prepare the next track.
         MediaPlayer mp = new MediaPlayer();
         try {
-            mp.setDataSource(state.getTracks().get(state.getCurrentTrack()));
+            mp.setDataSource(track);
             mp.prepare();
         } catch (IOException ioe) {
             Log.warn("Cannot load new track: %s", ioe.getMessage());
@@ -352,12 +353,13 @@ class PlayerControl extends Binder
         current = mp;
 
         // Load track metadata.
-        String track = state.getTracks().get(state.getCurrentTrack());
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
             md.setDataSource(track);
             TrackInfo tinfo = new TrackInfo(md, current.getDuration());
-            if (currentInfo != null && tinfo.getAlbum().equals(currentInfo.getAlbum())) {
+            if (currentInfo != null &&
+                state.getCurrentTrack() > 0 &&
+                tinfo.getAlbum().equals(currentInfo.getAlbum())) {
                 tinfo.setArtwork(currentInfo.getArtwork());
             }
             currentInfo = tinfo;
