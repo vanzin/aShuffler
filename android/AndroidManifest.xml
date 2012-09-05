@@ -29,9 +29,10 @@ Copyright 2012 Marcelo Vanzin
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-		<service android:name=".PlayerService" />
+		<service android:name=".PlayerService"
+				 android:label="aShuffler Service" />
 		<receiver android:name=".RemoteControlMonitor">
-			<intent-filter>
+			<intent-filter android:priority="100000">
 				<action android:name="android.intent.action.MEDIA_BUTTON" />
 			</intent-filter>
 		</receiver>
