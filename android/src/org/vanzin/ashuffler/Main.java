@@ -95,6 +95,9 @@ public class Main extends Activity
             setCurrentTrack(control.getCurrentInfo());
         }
         updatePlayControls(control.isPlaying());
+        if (control.isPlaying()) {
+            setupProgressTimer();
+        }
     }
 
     @Override
@@ -124,16 +127,7 @@ public class Main extends Activity
         });
 
         if (trackState == TrackState.PLAY) {
-            if (progressTimer == null) {
-                progressTimer = new Timer();
-            }
-            progressTask = new TimerTask() {
-                @Override
-                public void run() {
-                    updateTimesTask();
-                }
-            };
-            progressTimer.schedule(progressTask, 1000, 1000);
+            setupProgressTimer();
         } else {
             if (progressTask != null) {
                 progressTask.cancel();
@@ -230,6 +224,21 @@ public class Main extends Activity
             return String.format("%d:%02d:%02d", hours, min, secs);
         } else {
             return String.format("%02d:%02d", min, secs);
+        }
+    }
+
+    private synchronized void setupProgressTimer() {
+        if (progressTimer == null) {
+            progressTimer = new Timer();
+        }
+        if (progressTask == null) {
+            progressTask = new TimerTask() {
+                @Override
+                public void run() {
+                    updateTimesTask();
+                }
+            };
+            progressTimer.schedule(progressTask, 1000, 1000);
         }
     }
 
