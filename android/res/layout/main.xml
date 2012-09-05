@@ -154,5 +154,36 @@ Copyright 2012 Marcelo Vanzin
 			/>
 
 	</LinearLayout>
+
+	<!-- Progress. -->
+	<LinearLayout
+		android:orientation="horizontal"
+		android:layout_width="fill_parent"
+		android:layout_height="wrap_content"
+		android:gravity="center"
+		>
+		<TextView
+			android:id="@+id/elapsed"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text=""
+			/>
+		<SeekBar
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_weight="0.8"
+			android:paddingLeft="2px"
+			android:paddingRight="2px"
+			android:id="@+id/seekbar"
+			android:max="100"
+			/>
+		<TextView
+			android:id="@+id/remaining"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text=""
+			/>
+	</LinearLayout>
+
 </LinearLayout>
 

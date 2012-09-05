@@ -87,10 +87,11 @@ class PlayerControl extends Binder
                Runnable {
 
     private static final int ONGOING_NOTIFICATION = 10001;
+    private static final String CMD_ARGS = "cmd_args";
 
     private final PlayerService service;
     private final Thread worker;
-    private final BlockingQueue<Command> commands;
+    private final BlockingQueue<Intent> commands;
     private final BroadcastReceiver bcastReceiver;
     private final BroadcastReceiver headsetReceiver;
     private final AudioManager audioManager;
@@ -111,7 +112,7 @@ class PlayerControl extends Binder
     public PlayerControl(PlayerService service) {
         this.service = service;
         this.listeners = new LinkedList<PlayerListener>();
-        this.commands = new LinkedBlockingQueue<Command>();
+        this.commands = new LinkedBlockingQueue<Intent>();
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
         this.remoteControl = new ComponentName(service.getPackageName(),
@@ -174,6 +175,22 @@ class PlayerControl extends Binder
     }
 
     /**
+     * Get the elapsed time of the current track.
+     * <p>
+     * Also not very thread-safe.
+     *
+     * @return Current track position in milliseconds, or 0 if no
+     *         track is playing.
+     */
+    public int getElapsedTime() {
+        MediaPlayer mp = current;
+        if (mp != null) {
+            return mp.getCurrentPosition();
+        }
+        return 0;
+    }
+
+    /**
      * Shutdown the player.
      * <p>
      * Stop the worker thread, stop playback, and save all state.
@@ -213,6 +230,7 @@ class PlayerControl extends Binder
         PREV_FOLDER,
         PREV_TRACK,
         PLAY_PAUSE,
+        SEEK,
         SET_AUDIO_FOCUS,
         STOP,
         STOP_AND_SAVE,
@@ -226,8 +244,18 @@ class PlayerControl extends Binder
      * is no way to monitor completion, unless it causes some
      * side-effect (like starting playback, which fires an event).
      */
-    public void runCommand(Command cmd) {
-        commands.offer(cmd);
+    public void runCommand(Command cmd, String... args) {
+        Intent intent = new Intent();
+        intent.setAction(cmd.name());
+        intent.putExtra(CMD_ARGS, args);
+        runIntent(intent);
+    }
+
+    /**
+     * Raw command interface. Try not to use it.
+     */
+    public void runIntent(Intent intent) {
+        commands.offer(intent);
     }
 
     /**
@@ -262,6 +290,34 @@ class PlayerControl extends Binder
         } else {
             startPlayback();
         }
+    }
+
+    private void seek(String[] args) {
+        if (args == null || args.length != 1) {
+            Log.warn("Invalid arguments to seek().");
+            return;
+        }
+
+        int percent;
+        try {
+            percent = Integer.parseInt(args[0]);
+        } catch (NumberFormatException nfe) {
+            Log.warn("Invalid integer argument: %s", args[0]);
+            return;
+        }
+
+        if (percent < 0 || percent > 100) {
+            Log.warn("Invalid seek() argument: %d", percent);
+            return;
+        }
+
+        // Finally, do something.
+        if (current == null) {
+            return;
+        }
+
+        int newPos = currentInfo.getDuration() * percent / 100;
+        current.seekTo(newPos);
     }
 
     private void stop(boolean mayStopService) {
@@ -495,7 +551,15 @@ class PlayerControl extends Binder
 
         while (true) {
             try {
-                Command cmd = commands.take();
+                Intent intent = commands.take();
+                Command cmd;
+                try {
+                    cmd = Command.valueOf(intent.getAction());
+                } catch (IllegalArgumentException iae) {
+                    Log.warn("Unknown command: %s", intent.getAction());
+                    continue;
+                }
+                String[] args = intent.getStringArrayExtra(CMD_ARGS);
                 switch (cmd) {
                 case CHECK_FOLDERS:
                     checkFolders();
@@ -517,6 +581,9 @@ class PlayerControl extends Binder
                     break;
                 case PLAY_PAUSE:
                     playPause();
+                    break;
+                case SEEK:
+                    seek(args);
                     break;
                 case SET_AUDIO_FOCUS:
                     setAudioFocus(true);

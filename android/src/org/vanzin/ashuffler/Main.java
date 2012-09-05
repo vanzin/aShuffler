@@ -27,9 +27,12 @@ import android.net.Uri;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import java.io.File;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import org.vanzin.ashuffler.PlayerControl.Command;
 
@@ -40,10 +43,14 @@ import org.vanzin.ashuffler.PlayerControl.Command;
  * events.
  */
 public class Main extends Activity
-    implements PlayerListener, ServiceConnection
-{
+    implements PlayerListener, ServiceConnection,
+                 SeekBar.OnSeekBarChangeListener {
+
     private PlayerControl control;
     private String currentArtwork;
+
+    private Timer progressTimer;
+    private TimerTask progressTask;
 
     /** Called when the activity is first created. */
     @Override
@@ -51,6 +58,8 @@ public class Main extends Activity
     {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+        ((SeekBar)findViewById(R.id.seekbar))
+            .setOnSeekBarChangeListener(this);
     }
 
     @Override
@@ -67,6 +76,10 @@ public class Main extends Activity
             control.removePlayerListener(this);
         }
         unbindService(this);
+        if (progressTimer != null) {
+            progressTimer.cancel();
+            progressTimer = null;
+        }
     }
 
     @Override
@@ -81,7 +94,7 @@ public class Main extends Activity
         if (control.getCurrentInfo() != null) {
             setCurrentTrack(control.getCurrentInfo());
         }
-        updatePlayButton(control.isPlaying());
+        updatePlayControls(control.isPlaying());
     }
 
     @Override
@@ -106,9 +119,48 @@ public class Main extends Activity
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updatePlayButton(trackState == TrackState.PLAY);
+                updatePlayControls(trackState == TrackState.PLAY);
             }
         });
+
+        if (trackState == TrackState.PLAY) {
+            if (progressTimer == null) {
+                progressTimer = new Timer();
+            }
+            progressTask = new TimerTask() {
+                @Override
+                public void run() {
+                    updateTimesTask();
+                }
+            };
+            progressTimer.schedule(progressTask, 1000, 1000);
+        } else {
+            if (progressTask != null) {
+                progressTask.cancel();
+                progressTask = null;
+            }
+            updateTimesTask();
+        }
+    }
+
+    @Override
+    public void onProgressChanged(SeekBar seekBar,
+                                  int progress,
+                                  boolean fromUser) {
+        if (!fromUser || control == null) {
+            return;
+        }
+        control.runCommand(Command.SEEK, String.valueOf(progress));
+    }
+
+    @Override
+    public void onStartTrackingTouch(SeekBar seekBar) {
+        // No op.
+    }
+
+    @Override
+    public void onStopTrackingTouch(SeekBar seekBar) {
+        // No op.
     }
 
     private void setCurrentTrack(TrackInfo info) {
@@ -129,19 +181,56 @@ public class Main extends Activity
         } else {
             cover.setImageResource(R.drawable.nocover);
         }
+        updateTimes();
     }
 
-    private void updatePlayButton(boolean isPlaying) {
+    private void updateTimes() {
+        if (control == null) {
+            return;
+        }
+        TrackInfo current = control.getCurrentInfo();
+        int position = control.getElapsedTime() / 1000;
+        int progress = position * 100 * 1000 / current.getDuration();
+        int remaining = current.getDuration() / 1000 - position;
+
+        getTextView(R.id.elapsed).setText(secondsToStr(position));
+        getTextView(R.id.remaining).setText("-" + secondsToStr(remaining));
+        ((SeekBar)findViewById(R.id.seekbar)).setProgress(progress);
+    }
+
+    private void updateTimesTask() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateTimes();
+            }
+        });
+    }
+
+    private void updatePlayControls(boolean isPlaying) {
         ImageButton playBtn = (ImageButton) findViewById(R.id.play_btn);
         if (isPlaying) {
             playBtn.setImageResource(R.drawable.pause);
         } else {
             playBtn.setImageResource(R.drawable.play);
         }
+        ((SeekBar)findViewById(R.id.seekbar)).setEnabled(isPlaying);
     }
 
     private TextView getTextView(int id) {
         return (TextView) findViewById(id);
+    }
+
+    private String secondsToStr(int seconds) {
+        int hours = seconds / 3600;
+        int min = (seconds % 3600) / 60;
+        int secs = (seconds % 60);
+
+        if (hours > 0) {
+            return String.format("%d:%02d:%02d", hours, min, secs);
+        } else {
+            return String.format("%02d:%02d", min, secs);
+        }
     }
 
     /* Playback controls. */
