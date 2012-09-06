@@ -23,26 +23,22 @@ package org.vanzin.ashuffler;
 public interface PlayerListener {
 
     public static enum TrackState {
+        COMPLETE,
         PLAY,
         PAUSE,
         STOP,
     }
 
     /**
-     * Called when a track starts to be played.
-     *
-     * @param state The player state.
-     * @param info Info about the track being played.
-     */
-    void playbackStarted(PlayerState state, TrackInfo info);
-
-    /**
      * Called when the playback state of the current track changes.
      *
      * @param state The player state.
+     * @param track The affected track info.
      * @param trackState The new playback state of the track.
      */
-    void trackStateChanged(PlayerState state, TrackState trackState);
+    void trackStateChanged(PlayerState state,
+                           TrackInfo track,
+                           TrackState trackState);
 
 }
 

@@ -106,22 +106,15 @@ public class Main extends Activity
     }
 
     @Override
-    public void playbackStarted(final PlayerState state,
-                                final TrackInfo info) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                setCurrentTrack(info);
-            }
-        });
-    }
-
-    @Override
     public void trackStateChanged(final PlayerState state,
+                                  final TrackInfo track,
                                   final TrackState trackState) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                if (trackState == TrackState.PLAY) {
+                    setCurrentTrack(track);
+                }
                 updatePlayControls(trackState == TrackState.PLAY);
             }
         });

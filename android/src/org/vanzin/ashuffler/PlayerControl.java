@@ -139,6 +139,9 @@ class PlayerControl extends Binder
         this.shutdownReceiver = new ShutdownMonitor();
         service.registerReceiver(shutdownReceiver, filter);
 
+        // Instantiate the scrobbler.
+        addPlayerListener(new Scrobbler(service));
+
         state = loadObject(PlayerState.class);
         if (state == null) {
             state = new PlayerState();
@@ -330,7 +333,7 @@ class PlayerControl extends Binder
 
     private void stop(boolean mayStopService) {
         if (current != null) {
-            scrobble(false);
+            fireTrackStateChange(PlayerListener.TrackState.STOP);
             try {
                 current.stop();
             } finally {
@@ -343,7 +346,6 @@ class PlayerControl extends Binder
         if (mayStopService && serviceStarted) {
             service.stopSelf();
         }
-        fireTrackStateChange(PlayerListener.TrackState.STOP);
         pausedByFocusLoss = false;
     }
 
@@ -463,10 +465,6 @@ class PlayerControl extends Binder
             serviceStarted = true;
         }
         showNotification();
-
-        for (PlayerListener pl : listeners) {
-            pl.playbackStarted(state, currentInfo);
-        }
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
 
         if (state.getTrackPosition() > 0 &&
@@ -474,7 +472,6 @@ class PlayerControl extends Binder
             mp.seekTo(state.getTrackPosition());
         }
         pausedByFocusLoss = false;
-        scrobble(true);
     }
 
     private void showNotification() {
@@ -495,7 +492,7 @@ class PlayerControl extends Binder
 
     private void fireTrackStateChange(PlayerListener.TrackState newState) {
         for (PlayerListener pl : listeners) {
-            pl.trackStateChanged(state, newState);
+            pl.trackStateChanged(state, currentInfo, newState);
         }
     }
 
@@ -517,25 +514,9 @@ class PlayerControl extends Binder
         }
     }
 
-    /**
-     * Scrobble Droid support.
-     * <p>
-     * See: http://code.google.com/p/scrobbledroid/wiki/DeveloperAPI
-     *
-     * @param playing Whether the current track is playing.
-     */
-    private void scrobble(boolean playing) {
-        Intent i = new Intent("net.jjc1138.android.scrobbler.action.MUSIC_STATUS");
-        i.putExtra("playing", playing);
-        i.putExtra("artist", currentInfo.getArtist());
-        i.putExtra("track", currentInfo.getTitle());
-        i.putExtra("album", currentInfo.getAlbum());
-        i.putExtra("secs", currentInfo.getDuration());
-        service.sendBroadcast(i);
-    }
-
     @Override
     public void onCompletion(MediaPlayer mp) {
+        fireTrackStateChange(PlayerListener.TrackState.COMPLETE);
         runCommand(Command.NEXT_TRACK);
     }
 
