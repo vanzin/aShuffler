@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.LinkedList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Main media player control class.
@@ -97,11 +98,11 @@ class PlayerControl extends Binder
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
     private final ComponentName remoteControl;
+    private final AtomicReference<MediaPlayer> current;
 
     private boolean pausedByFocusLoss;
     private boolean serviceStarted;
     private PlayerState state;
-    private MediaPlayer current;
     private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
 
@@ -118,6 +119,7 @@ class PlayerControl extends Binder
             service.getSystemService(Context.AUDIO_SERVICE);
         this.remoteControl = new ComponentName(service.getPackageName(),
             RemoteControlMonitor.class.getName());
+        this.current = new AtomicReference<MediaPlayer>();
 
         // Instantiate the storage broadcast receiver.
         IntentFilter filter = new IntentFilter();
@@ -159,7 +161,7 @@ class PlayerControl extends Binder
      * Note that this is not thread-safe.
      */
     public MediaPlayer getPlayer() {
-        return current;
+        return current.get();
     }
 
     /**
@@ -193,8 +195,8 @@ class PlayerControl extends Binder
      *         track is playing.
      */
     public int getElapsedTime() {
-        MediaPlayer mp = current;
-        if (mp != null) {
+        MediaPlayer mp = current.get();
+        if (mp != null && mp.isPlaying()) {
             return mp.getCurrentPosition();
         }
         return 0;
@@ -275,25 +277,27 @@ class PlayerControl extends Binder
      * Not thread-safe either.
      */
     public boolean isPlaying() {
-        MediaPlayer mp = current;
+        MediaPlayer mp = current.get();
         return mp != null && mp.isPlaying();
     }
 
     private void pause() {
-        if (current != null && current.isPlaying()) {
-            current.pause();
+        MediaPlayer mp = current.get();
+        if (mp != null && mp.isPlaying()) {
+            mp.pause();
             fireTrackStateChange(PlayerListener.TrackState.PAUSE);
             showNotification();
         }
     }
 
     private void playPause() {
-        if (current != null) {
-            if (current.isPlaying()) {
-                current.pause();
+        MediaPlayer mp = current.get();
+        if (mp != null) {
+            if (mp.isPlaying()) {
+                mp.pause();
                 fireTrackStateChange(PlayerListener.TrackState.PAUSE);
             } else {
-                current.start();
+                mp.start();
                 fireTrackStateChange(PlayerListener.TrackState.PLAY);
             }
             showNotification();
@@ -323,22 +327,24 @@ class PlayerControl extends Binder
         }
 
         // Finally, do something.
-        if (current == null) {
+        MediaPlayer mp = current.get();
+        if (mp == null) {
             return;
         }
 
         int newPos = currentInfo.getDuration() * percent / 100;
-        current.seekTo(newPos);
+        mp.seekTo(newPos);
     }
 
     private void stop(boolean mayStopService) {
-        if (current != null) {
+        MediaPlayer mp = current.get();
+        current.set(null);
+        if (mp != null) {
             fireTrackStateChange(PlayerListener.TrackState.STOP);
             try {
-                current.stop();
+                mp.stop();
             } finally {
-                current.release();
-                current = null;
+                mp.release();
             }
             state.setTrackPosition(0);
         }
@@ -416,13 +422,13 @@ class PlayerControl extends Binder
         // Start playback.
         mp.start();
         mp.setOnCompletionListener(this);
-        current = mp;
+        current.set(mp);
 
         // Load track metadata.
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
             md.setDataSource(track);
-            TrackInfo tinfo = new TrackInfo(md, current.getDuration());
+            TrackInfo tinfo = new TrackInfo(md, mp.getDuration());
             if (currentInfo != null &&
                 state.getCurrentTrack() > 0 &&
                 tinfo.getAlbum().equals(currentInfo.getAlbum())) {
@@ -475,7 +481,7 @@ class PlayerControl extends Binder
     }
 
     private void showNotification() {
-        String state = current.isPlaying() ? "Playing" : "Paused";
+        String state = current.get().isPlaying() ? "Playing" : "Paused";
         String msg = String.format("%s: %s - %s",
             state, currentInfo.getArtist(), currentInfo.getTitle());
         Notification notification = new Notification(
@@ -497,17 +503,18 @@ class PlayerControl extends Binder
     }
 
     private void setAudioFocus(boolean focused) {
+        MediaPlayer mp = current.get();
         if (focused) {
             if (pausedByFocusLoss) {
-                if (current != null) {
-                    current.start();
+                if (mp != null) {
+                    mp.start();
                     fireTrackStateChange(PlayerListener.TrackState.PLAY);
                 }
                 pausedByFocusLoss = false;
             }
         } else {
-            if (current != null && current.isPlaying()) {
-                current.pause();
+            if (mp != null && mp.isPlaying()) {
+                mp.pause();
                 fireTrackStateChange(PlayerListener.TrackState.PAUSE);
                 pausedByFocusLoss = true;
             }
@@ -598,8 +605,8 @@ class PlayerControl extends Binder
 
     private void stopAndSave() {
         TrackInfo trackInfo = currentInfo;
-        if (current != null) {
-            int pos = current.getCurrentPosition();
+        if (current.get() != null) {
+            int pos = current.get().getCurrentPosition();
             stop(true);
             state.setTrackPosition(pos);
             saveObject(currentInfo);
