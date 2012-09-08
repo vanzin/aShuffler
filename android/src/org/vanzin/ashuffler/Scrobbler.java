@@ -21,12 +21,18 @@ import android.content.Intent;
 /**
  * Listener that implements Last.fm scrobbling.
  * <p>
- * Currently uses the ScrobbleDroid API.
+ * Currently uses the Simple Last.fm Scrobbler API.
  * <p>
- * See: http://code.google.com/p/scrobbledroid/wiki/DeveloperAPI
+ * See: http://code.google.com/p/a-simple-lastfm-scrobbler/wiki/Developers
  */
 class Scrobbler implements PlayerListener {
 
+    private final static int ST_START = 0;
+    private final static int ST_RESUME = 1;
+    private final static int ST_PAUSE = 2;
+    private final static int ST_COMPLETE = 3;
+
+    private boolean isPaused;
     private Context context;
 
     public Scrobbler(Context context) {
@@ -39,27 +45,33 @@ class Scrobbler implements PlayerListener {
                                   PlayerListener.TrackState trackState) {
         switch (trackState) {
         case COMPLETE:
-            scrobble(track, false);
+            scrobble(track, ST_COMPLETE);
+            isPaused = false;
             break;
         case PAUSE:
-            scrobble(track, false);
+            scrobble(track, ST_PAUSE);
+            isPaused = true;
             break;
         case PLAY:
-            scrobble(track, true);
+            scrobble(track, isPaused ? ST_RESUME : ST_START);
+            isPaused = false;
             break;
         case STOP:
-            scrobble(track, false);
+            scrobble(track, ST_PAUSE);
+            isPaused = false;
             break;
         }
     }
 
-    private void scrobble(TrackInfo track, boolean playing) {
-        Intent i = new Intent("net.jjc1138.android.scrobbler.action.MUSIC_STATUS");
-        i.putExtra("playing", playing);
+    private void scrobble(TrackInfo track, int state) {
+        Intent i = new Intent("com.adam.aslfms.notify.playstatechanged");
+        i.putExtra("app-name", "Album Shuffler");
+        i.putExtra("app-package", "org.vanzin.ashuffler");
+        i.putExtra("state", state);
         i.putExtra("artist", track.getArtist());
         i.putExtra("track", track.getTitle());
         i.putExtra("album", track.getAlbum());
-        i.putExtra("secs", track.getDuration() / 1000);
+        i.putExtra("duration", track.getDuration() / 1000);
         context.sendBroadcast(i);
     }
 
