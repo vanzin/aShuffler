@@ -196,7 +196,7 @@ class PlayerControl extends Binder
      */
     public int getElapsedTime() {
         MediaPlayer mp = current.get();
-        if (mp != null && mp.isPlaying()) {
+        if (mp != null) {
             return mp.getCurrentPosition();
         }
         return 0;
