@@ -420,6 +420,10 @@ class PlayerControl extends Binder
         stop(false);
 
         // Start playback.
+        if (state.getTrackPosition() > 0 &&
+            state.getTrackPosition() < mp.getDuration()) {
+            mp.seekTo(state.getTrackPosition());
+        }
         mp.start();
         mp.setOnCompletionListener(this);
         current.set(mp);
@@ -470,14 +474,10 @@ class PlayerControl extends Binder
             service.startService(intent);
             serviceStarted = true;
         }
+
+        pausedByFocusLoss = false;
         showNotification();
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
-
-        if (state.getTrackPosition() > 0 &&
-            state.getTrackPosition() < mp.getDuration()) {
-            mp.seekTo(state.getTrackPosition());
-        }
-        pausedByFocusLoss = false;
     }
 
     private void showNotification() {

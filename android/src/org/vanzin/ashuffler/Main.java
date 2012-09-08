@@ -97,12 +97,15 @@ public class Main extends Activity
         updatePlayControls(control.isPlaying());
         if (control.isPlaying()) {
             setupProgressTimer();
+        } else {
+            updateTimes(control.getState().getTrackPosition());
         }
     }
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
         control = null;
+        currentArtwork = null;
     }
 
     @Override
@@ -168,15 +171,18 @@ public class Main extends Activity
         } else {
             cover.setImageResource(R.drawable.nocover);
         }
-        updateTimes();
+        updateTimes(control.getElapsedTime());
     }
 
-    private void updateTimes() {
+    private void updateTimes(int elapsed) {
         if (control == null) {
             return;
         }
         TrackInfo current = control.getCurrentInfo();
-        int position = control.getElapsedTime() / 1000;
+        if (current == null) {
+            return;
+        }
+        int position = elapsed / 1000;
         int progress = position * 100 * 1000 / current.getDuration();
         int remaining = current.getDuration() / 1000 - position;
 
@@ -189,7 +195,7 @@ public class Main extends Activity
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updateTimes();
+                updateTimes(control.getElapsedTime());
             }
         });
     }
