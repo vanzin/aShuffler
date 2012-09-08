@@ -352,6 +352,8 @@ class PlayerControl extends Binder
         if (mayStopService && serviceStarted) {
             service.stopSelf();
         }
+        saveObject(state);
+        saveObject(currentInfo);
         pausedByFocusLoss = false;
     }
 
@@ -474,6 +476,10 @@ class PlayerControl extends Binder
             service.startService(intent);
             serviceStarted = true;
         }
+
+        // Save state
+        saveObject(state);
+        saveObject(currentInfo);
 
         pausedByFocusLoss = false;
         showNotification();
