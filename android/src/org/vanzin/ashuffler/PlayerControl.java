@@ -658,13 +658,13 @@ class PlayerControl extends Binder
         }
 
         // Check if the previous current folder exists in the list,
-        // set it as the current.
+        // set it as the first in the new list.
         boolean currentRestored = false;
         if (currentFolder != null) {
             for (int i = 0; i < state.getFolders().size(); i++) {
                 if (state.getFolders().get(i).equals(currentFolder)) {
-                    currentRestored = true;
-                    state.setCurrentFolder(i);
+                    state.getFolders().remove(i);
+                    state.getFolders().add(0, currentFolder);
                     break;
                 }
             }
