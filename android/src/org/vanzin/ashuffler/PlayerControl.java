@@ -223,11 +223,15 @@ class PlayerControl extends Binder
     }
 
     public void addPlayerListener(PlayerListener pl) {
-        listeners.add(pl);
+        synchronized (listeners) {
+            listeners.add(pl);
+        }
     }
 
     public void removePlayerListener(PlayerListener pl) {
-        listeners.remove(pl);
+        synchronized (listeners) {
+            listeners.remove(pl);
+        }
     }
 
     /* Playback control. */
@@ -503,8 +507,10 @@ class PlayerControl extends Binder
     }
 
     private void fireTrackStateChange(PlayerListener.TrackState newState) {
-        for (PlayerListener pl : listeners) {
-            pl.trackStateChanged(state, currentInfo, newState);
+        synchronized (listeners) {
+            for (PlayerListener pl : listeners) {
+                pl.trackStateChanged(state, currentInfo, newState);
+            }
         }
     }
 

@@ -83,7 +83,7 @@ public class Main extends Activity
     }
 
     @Override
-    public void onConfigurationChanged (Configuration newConfig) {
+    public void onConfigurationChanged(Configuration newConfig) {
 
     }
 
@@ -94,12 +94,18 @@ public class Main extends Activity
         if (control.getCurrentInfo() != null) {
             setCurrentTrack(control.getCurrentInfo());
         }
-        updatePlayControls(control.isPlaying());
-        if (control.isPlaying()) {
+
+        boolean isPlaying = control.isPlaying();
+        updatePlayControls(isPlaying);
+        if (isPlaying) {
             setupProgressTimer();
-        } else {
-            updateTimes(control.getState().getTrackPosition());
         }
+
+        int position = control.getElapsedTime();
+        if (position == 0) {
+            position = control.getState().getTrackPosition();
+        }
+        updateTimes(position);
     }
 
     @Override
