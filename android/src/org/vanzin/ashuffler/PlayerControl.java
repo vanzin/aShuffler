@@ -93,7 +93,7 @@ class PlayerControl extends Binder
     private final PlayerService service;
     private final Thread worker;
     private final BlockingQueue<Intent> commands;
-    private final BroadcastReceiver bcastReceiver;
+    private final BroadcastReceiver storageReceiver;
     private final BroadcastReceiver headsetReceiver;
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
@@ -125,9 +125,8 @@ class PlayerControl extends Binder
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_MEDIA_EJECT);
         filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
-
-        this.bcastReceiver = new StorageMonitor();
-        service.registerReceiver(bcastReceiver, filter);
+        this.storageReceiver = new StorageMonitor();
+        service.registerReceiver(storageReceiver, filter);
 
         // Instantiate the headset broadcast receiver.
         filter = new IntentFilter();
@@ -203,6 +202,14 @@ class PlayerControl extends Binder
     }
 
     /**
+     * @return Whether the SD card is currently mounted.
+     */
+    public boolean isStorageAvailable() {
+        return Environment.MEDIA_MOUNTED.equals(
+            Environment.getExternalStorageState());
+    }
+
+    /**
      * Shutdown the player.
      * <p>
      * Stop the worker thread, stop playback, and save all state.
@@ -217,7 +224,7 @@ class PlayerControl extends Binder
         stop(true);
         saveObject(state);
         saveObject(currentInfo);
-        service.unregisterReceiver(bcastReceiver);
+        service.unregisterReceiver(storageReceiver);
         service.unregisterReceiver(headsetReceiver);
         service.unregisterReceiver(shutdownReceiver);
     }
@@ -240,7 +247,6 @@ class PlayerControl extends Binder
      * Commands available for enqueueing.
      */
     public static enum Command {
-        CHECK_FOLDERS,
         NEXT_FOLDER,
         NEXT_TRACK,
         PAUSE,
@@ -251,6 +257,7 @@ class PlayerControl extends Binder
         SET_AUDIO_FOCUS,
         STOP,
         STOP_AND_SAVE,
+        STORAGE_MOUNTED,
         UNSET_AUDIO_FOCUS,
     }
 
@@ -553,9 +560,11 @@ class PlayerControl extends Binder
         // Make sure the state is loaded.
         getState();
 
-        audioManager.requestAudioFocus(this,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN);
+        if (!pausedByFocusLoss && isStorageAvailable()) {
+            audioManager.requestAudioFocus(this,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN);
+        }
 
         while (true) {
             try {
@@ -567,11 +576,17 @@ class PlayerControl extends Binder
                     Log.warn("Unknown command: %s", intent.getAction());
                     continue;
                 }
+
+                // If storage is not available, we only allow
+                // "STORAGE_MOUNTED" to go through, so that we avoid
+                // trying to change player state or access the
+                // underlying files in that state.
+                if (!isStorageAvailable() && cmd != Command.STORAGE_MOUNTED) {
+                    return;
+                }
+
                 String[] args = intent.getStringArrayExtra(CMD_ARGS);
                 switch (cmd) {
-                case CHECK_FOLDERS:
-                    checkFolders();
-                    break;
                 case NEXT_FOLDER:
                     changeFolder(1);
                     break;
@@ -601,6 +616,9 @@ class PlayerControl extends Binder
                     break;
                 case STOP_AND_SAVE:
                     stopAndSave();
+                    break;
+                case STORAGE_MOUNTED:
+                    checkFolders();
                     break;
                 case UNSET_AUDIO_FOCUS:
                     setAudioFocus(false);
@@ -791,10 +809,12 @@ class PlayerControl extends Binder
 
         @Override
         public void onReceive(Context context, Intent intent) {
+            System.err.printf("ASHUFFLER: storage intent = %s\n", intent.getAction());
+            Log.warn("ASHUFFLER: storage intent = %s", intent.getAction());
             if (Intent.ACTION_MEDIA_EJECT.equals(intent.getAction())) {
                 runCommand(Command.STOP_AND_SAVE);
             } else if (intent.ACTION_MEDIA_MOUNTED.equals(intent.getAction())) {
-                runCommand(Command.CHECK_FOLDERS);
+                runCommand(Command.STORAGE_MOUNTED);
             }
         }
 

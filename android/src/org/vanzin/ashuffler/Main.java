@@ -29,6 +29,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
 import java.util.Timer;
@@ -167,7 +168,7 @@ public class Main extends Activity
             String.format("%d.", info.getTrackNumber()));
 
         ImageView cover = (ImageView) findViewById(R.id.cover);
-        if (info.getArtwork() != null) {
+        if (control.isStorageAvailable() && info.getArtwork() != null) {
             if (!info.getArtwork().equals(currentArtwork)) {
                 Uri uri = Uri.fromFile(new File(info.getArtwork()));
                 cover.setImageURI(uri);
@@ -275,7 +276,15 @@ public class Main extends Activity
 
     private void runCommand(Command cmd) {
         if (control != null) {
-            control.runCommand(cmd);
+            if (!control.isStorageAvailable()) {
+                Toast toast = Toast.makeText(
+                    getApplicationContext(),
+                    R.string.not_available,
+                    Toast.LENGTH_SHORT);
+                toast.show();
+            } else {
+                control.runCommand(cmd);
+            }
         } else {
             Log.warn("No control.");
         }
