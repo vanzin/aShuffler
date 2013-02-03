@@ -22,14 +22,13 @@ This is a short list of what it does:
 * Responds to audio focus by pausing / resuming playback, so you
   can answer your phone.
 * Pauses playback if headset is removed.
-* Uses ScrobbleDroid to send data to Last.fm.
+* Uses the Simple Last.fm Scrobbler API to send data to Last.fm.
 
 Maybe Features
 --------------
 
 Things I haven't had time to look at yet.
 
-* Seeking. Or at least an indication of song progress.
 * Equalizer.
 
 Non-Features
