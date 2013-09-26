@@ -80,6 +80,7 @@ public class Main extends Activity
         if (progressTimer != null) {
             progressTimer.cancel();
             progressTimer = null;
+            progressTask = null;
         }
     }
 
@@ -92,21 +93,25 @@ public class Main extends Activity
     public void onServiceConnected(ComponentName name, IBinder service) {
         control = (PlayerControl) service;
         control.addPlayerListener(this);
-        if (control.getCurrentInfo() != null) {
-            setCurrentTrack(control.getCurrentInfo());
-        }
+        runOnUiThread(new Runnable() {
+            public void run() {
+                if (control.getCurrentInfo() != null) {
+                    setCurrentTrack(control.getCurrentInfo());
+                }
 
-        boolean isPlaying = control.isPlaying();
-        updatePlayControls(isPlaying);
-        if (isPlaying) {
-            setupProgressTimer();
-        }
+                boolean isPlaying = control.isPlaying();
+                updatePlayControls(isPlaying);
 
-        int position = control.getElapsedTime();
-        if (position == 0) {
-            position = control.getState().getTrackPosition();
-        }
-        updateTimes(position);
+                int position = control.getElapsedTime();
+                if (position == 0) {
+                    position = control.getState().getTrackPosition();
+                }
+                updateTimes(position);
+                if (isPlaying) {
+                    setupProgressTimer();
+                }
+            }
+        });
     }
 
     @Override
