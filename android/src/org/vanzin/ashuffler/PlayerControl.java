@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Marcelo Vanzin
+ * Copyright 2012-2013 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -148,7 +148,7 @@ class PlayerControl extends Binder
             state = new PlayerState();
         }
         currentInfo = loadObject(TrackInfo.class);
-        checkFolders();
+        checkFolders(false);
 
         worker = new Thread(this);
         worker.start();
@@ -302,6 +302,14 @@ class PlayerControl extends Binder
     }
 
     private void playPause() {
+        if (!hasTracks()) {
+            checkFolders(true);
+            if (!hasTracks()) {
+                Log.warn("No music found to play.");
+                return;
+            }
+        }
+
         MediaPlayer mp = current.get();
         if (mp != null) {
             if (mp.isPlaying()) {
@@ -417,6 +425,12 @@ class PlayerControl extends Binder
 
     private void startPlayback() {
         String track = state.getTracks().get(state.getCurrentTrack());
+        if (!new File(track).isFile()) {
+            checkFolders(true);
+            state.setCurrentTrack(0);
+            state.setCurrentFolder(0);
+            track = state.getTracks().get(state.getCurrentTrack());
+        }
 
         // Prepare the next track.
         MediaPlayer mp = new MediaPlayer();
@@ -618,7 +632,7 @@ class PlayerControl extends Binder
                     stopAndSave();
                     break;
                 case STORAGE_MOUNTED:
-                    checkFolders();
+                    checkFolders(false);
                     break;
                 case UNSET_AUDIO_FOCUS:
                     setAudioFocus(false);
@@ -645,11 +659,11 @@ class PlayerControl extends Binder
         saveObject(trackInfo);
     }
 
-    private void checkFolders() {
+    private void checkFolders(boolean force) {
         String currentFolder = null;
         String currentTrack = null;
         int trackPosition = state.getTrackPosition();
-        if (state.getFolders() != null) {
+        if (hasTracks()) {
             currentFolder = state.getFolders().get(state.getCurrentFolder());
             if (state.getTracks() != null) {
                 currentTrack = state.getTracks().get(state.getCurrentTrack());
@@ -659,8 +673,8 @@ class PlayerControl extends Binder
         // Check to see if the storage timestamps have changed.
         File root = Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_MUSIC);
-        if (foldersNeedReload(root)) {
-            Log.info("Re-loading folder data.");
+        if (force || foldersNeedReload(root)) {
+            Log.info("Re-loading data from %s.", root.getAbsolutePath());
             List<String> folders = new LinkedList<String>();
             findChildFolders(root, folders);
             Collections.shuffle(folders);
@@ -689,7 +703,7 @@ class PlayerControl extends Binder
         }
 
         // Load the track list if needed.
-        if (state.getTracks() == null || state.getTracks().isEmpty()) {
+        if (!hasTracks()) {
             String folder = state.getFolders().get(state.getCurrentFolder());
             List<String> tracks = buildTrackList(folder);
             state.setTracks(tracks);
@@ -774,6 +788,10 @@ class PlayerControl extends Binder
     }
 
     private void saveObject(Serializable object) {
+        if (object == null) {
+            return;
+        }
+
         String fileName = object.getClass().getName();
         if (object == null) {
             service.deleteFile(fileName);
@@ -797,6 +815,11 @@ class PlayerControl extends Binder
                 }
             }
         }
+    }
+
+    private boolean hasTracks() {
+        return state != null && state.getTracks() != null &&
+            !state.getTracks().isEmpty();
     }
 
     /**
