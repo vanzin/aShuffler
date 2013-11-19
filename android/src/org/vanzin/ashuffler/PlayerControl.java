@@ -105,6 +105,8 @@ class PlayerControl extends Binder
     private PlayerState state;
     private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
+    private MediaPlayer nextPlayer;
+    private String nextTrack;
 
     /**
      * Initializes the player control.
@@ -247,6 +249,7 @@ class PlayerControl extends Binder
      * Commands available for enqueueing.
      */
     public static enum Command {
+        CONTINUE,
         NEXT_FOLDER,
         NEXT_TRACK,
         PAUSE,
@@ -433,15 +436,19 @@ class PlayerControl extends Binder
         }
 
         // Prepare the next track.
-        MediaPlayer mp = new MediaPlayer();
-        try {
-            mp.setDataSource(track);
-            mp.prepare();
-        } catch (IOException ioe) {
-            Log.warn("Cannot load new track: %s", ioe.getMessage());
-            mp.release();
-            return;
+        MediaPlayer mp;
+        if (track.equals(nextTrack)) {
+            mp = nextPlayer;
+        } else {
+            if (nextPlayer != null) {
+                nextPlayer.release();
+            }
+            mp = preparePlayer(track);
+            if (mp == null) {
+                return;
+            }
         }
+        nextPlayer = null;
 
         // Stop the current track.
         stop(false);
@@ -452,7 +459,6 @@ class PlayerControl extends Binder
             mp.seekTo(state.getTrackPosition());
         }
         mp.start();
-        mp.setOnCompletionListener(this);
         current.set(mp);
 
         // Load track metadata.
@@ -502,13 +508,10 @@ class PlayerControl extends Binder
             serviceStarted = true;
         }
 
-        // Save state
-        saveObject(state);
-        saveObject(currentInfo);
-
         pausedByFocusLoss = false;
-        showNotification();
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
+        updateTrackInfo();
+        setUpNextPlayer();
     }
 
     private void showNotification() {
@@ -557,7 +560,9 @@ class PlayerControl extends Binder
     @Override
     public void onCompletion(MediaPlayer mp) {
         fireTrackStateChange(PlayerListener.TrackState.COMPLETE);
-        runCommand(Command.NEXT_TRACK);
+        current.set(null);
+        mp.release();
+        runCommand(Command.CONTINUE);
     }
 
     @Override
@@ -601,6 +606,9 @@ class PlayerControl extends Binder
 
                 String[] args = intent.getStringArrayExtra(CMD_ARGS);
                 switch (cmd) {
+                case CONTINUE:
+                    continueToNextTrack();
+                    break;
                 case NEXT_FOLDER:
                     changeFolder(1);
                     break;
@@ -820,6 +828,104 @@ class PlayerControl extends Binder
     private boolean hasTracks() {
         return state != null && state.getTracks() != null &&
             !state.getTracks().isEmpty();
+    }
+
+    private void continueToNextTrack() {
+        if (nextPlayer == null) {
+            changeTrack(1);
+            return;
+        }
+        state.setCurrentTrack(state.getCurrentTrack() + 1);
+        current.set(nextPlayer);
+        nextPlayer = null;
+        updateTrackInfo();
+        fireTrackStateChange(PlayerListener.TrackState.PLAY);
+        setUpNextPlayer();
+    }
+
+    private void setUpNextPlayer() {
+        int next = state.getCurrentTrack() + 1;
+        if (next >= state.getTracks().size()) {
+            return;
+        }
+
+        String nextPath = state.getTracks().get(next);
+        MediaPlayer nextPlayer = preparePlayer(nextPath);
+        if (nextPlayer == null) {
+            return;
+        }
+
+        if (current.get() == null) {
+            Log.warn("ShouldNotReachHere(NoCurrentPlayer)");
+            return;
+        }
+
+        current.get().setNextMediaPlayer(nextPlayer);
+        this.nextPlayer = nextPlayer;
+        this.nextTrack = nextPath;
+    }
+
+    private void updateTrackInfo() {
+        String track = state.getTracks().get(state.getCurrentTrack());
+        MediaPlayer mp = current.get();
+
+        // Load track metadata.
+        MediaMetadataRetriever md = new MediaMetadataRetriever();
+        try {
+            md.setDataSource(track);
+            TrackInfo tinfo = new TrackInfo(md, mp.getDuration());
+            if (currentInfo != null &&
+                state.getCurrentTrack() > 0 &&
+                tinfo.getAlbum().equals(currentInfo.getAlbum())) {
+                tinfo.setArtwork(currentInfo.getArtwork());
+            }
+            currentInfo = tinfo;
+        } finally {
+            md.release();
+        }
+
+        // Load artwork for album.
+        if (currentInfo.getArtwork() == null) {
+            try {
+                String criteria = String.format("%s = '%s' AND %s = '%s'",
+                    AlbumColumns.ARTIST, currentInfo.getArtist(),
+                    AlbumColumns.ALBUM, currentInfo.getAlbum());
+
+                Cursor cursor = service.getContentResolver().query(
+                    Albums.EXTERNAL_CONTENT_URI,
+                    new String[] { AlbumColumns.ALBUM_ART },
+                    criteria,
+                    null,
+                    null);
+                if (cursor != null) {
+                    cursor.moveToFirst();
+                    currentInfo.setArtwork(cursor.getString(0));
+                } else {
+                    currentInfo.setArtwork(null);
+                }
+            } catch (Exception e) {
+                Log.warn("Error querying artwork: %s: %s",
+                    e.getClass().getName(), e.getMessage());
+            }
+        }
+
+        showNotification();
+        saveObject(state);
+        saveObject(currentInfo);
+    }
+
+    private MediaPlayer preparePlayer(String track) {
+        MediaPlayer mp = new MediaPlayer();
+        try {
+            mp.setDataSource(track);
+            mp.prepare();
+            mp.setOnCompletionListener(this);
+            return mp;
+        } catch (IOException ioe) {
+            Log.warn("Cannot load new track: %s", ioe.getMessage());
+            mp.release();
+            return null;
+        }
     }
 
     /**
