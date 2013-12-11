@@ -98,15 +98,12 @@ class PlayerControl extends Binder
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
     private final ComponentName remoteControl;
-    private final AtomicReference<MediaPlayer> current;
+    private final AtomicReference<Player> current;
 
     private boolean pausedByFocusLoss;
     private boolean serviceStarted;
     private PlayerState state;
-    private TrackInfo currentInfo;
     private List<PlayerListener> listeners;
-    private MediaPlayer nextPlayer;
-    private String nextTrack;
 
     /**
      * Initializes the player control.
@@ -121,7 +118,7 @@ class PlayerControl extends Binder
             service.getSystemService(Context.AUDIO_SERVICE);
         this.remoteControl = new ComponentName(service.getPackageName(),
             RemoteControlMonitor.class.getName());
-        this.current = new AtomicReference<MediaPlayer>();
+        this.current = new AtomicReference<Player>();
 
         // Instantiate the storage broadcast receiver.
         IntentFilter filter = new IntentFilter();
@@ -149,30 +146,10 @@ class PlayerControl extends Binder
         if (state == null) {
             state = new PlayerState();
         }
-        currentInfo = loadObject(TrackInfo.class);
         checkFolders(false);
 
         worker = new Thread(this);
         worker.start();
-    }
-
-    /**
-     * Get the current MediaPlayer instance.
-     * <p>
-     * Note that this is not thread-safe.
-     */
-    public MediaPlayer getPlayer() {
-        return current.get();
-    }
-
-    /**
-     * Return the current player state.
-     * <p>
-     * The player state is not thread-safe. It's not recommended
-     * to have other classes modify it.
-     */
-    public PlayerState getState() {
-        return state;
     }
 
     /**
@@ -181,26 +158,17 @@ class PlayerControl extends Binder
      * As with other "getters", not thread-safe.
      */
     public TrackInfo getCurrentInfo() {
-        if (state == null) {
-            getState();
+        Player p = current.get();
+        if (p != null) {
+            return p.getInfo();
         }
-        return currentInfo;
+
+        return loadObject(TrackInfo.class);
     }
 
-    /**
-     * Get the elapsed time of the current track.
-     * <p>
-     * Also not very thread-safe.
-     *
-     * @return Current track position in milliseconds, or 0 if no
-     *         track is playing.
-     */
     public int getElapsedTime() {
-        MediaPlayer mp = current.get();
-        if (mp != null) {
-            return mp.getCurrentPosition();
-        }
-        return 0;
+        TrackInfo info = getCurrentInfo();
+        return info != null ? info.getElapsedTime() : 0;
     }
 
     /**
@@ -224,8 +192,12 @@ class PlayerControl extends Binder
             Log.warn("Wait interrupted.");
         }
         stop(true);
-        saveObject(state);
-        saveObject(currentInfo);
+        saveObject(state, PlayerState.class);
+
+        Player player = current.get();
+        if (player != null) {
+            saveObject(player.getInfo(), TrackInfo.class);
+        }
         service.unregisterReceiver(storageReceiver);
         service.unregisterReceiver(headsetReceiver);
         service.unregisterReceiver(shutdownReceiver);
@@ -249,7 +221,6 @@ class PlayerControl extends Binder
      * Commands available for enqueueing.
      */
     public static enum Command {
-        CONTINUE,
         NEXT_FOLDER,
         NEXT_TRACK,
         PAUSE,
@@ -291,17 +262,8 @@ class PlayerControl extends Binder
      * Not thread-safe either.
      */
     public boolean isPlaying() {
-        MediaPlayer mp = current.get();
-        return mp != null && mp.isPlaying();
-    }
-
-    private void pause() {
-        MediaPlayer mp = current.get();
-        if (mp != null && mp.isPlaying()) {
-            mp.pause();
-            fireTrackStateChange(PlayerListener.TrackState.PAUSE);
-            showNotification();
-        }
+        Player player = current.get();
+        return player != null && player.isPlaying();
     }
 
     private void playPause() {
@@ -313,16 +275,10 @@ class PlayerControl extends Binder
             }
         }
 
-        MediaPlayer mp = current.get();
-        if (mp != null) {
-            if (mp.isPlaying()) {
-                mp.pause();
-                fireTrackStateChange(PlayerListener.TrackState.PAUSE);
-            } else {
-                mp.start();
-                fireTrackStateChange(PlayerListener.TrackState.PLAY);
-            }
-            showNotification();
+        Player player = current.get();
+        if (player != null) {
+            player.playPause();
+            showNotification(player);
             pausedByFocusLoss = false;
         } else {
             startPlayback();
@@ -349,38 +305,35 @@ class PlayerControl extends Binder
         }
 
         // Finally, do something.
-        MediaPlayer mp = current.get();
-        if (mp == null) {
+        Player player = current.get();
+        if (player == null) {
             return;
         }
 
-        int newPos = currentInfo.getDuration() * percent / 100;
-        mp.seekTo(newPos);
+        int newPos = player.getInfo().getDuration() * percent / 100;
+        player.seekTo(newPos);
     }
 
     private void stop(boolean mayStopService) {
-        MediaPlayer mp = current.get();
+        Player player = current.get();
         current.set(null);
-        if (mp != null) {
-            fireTrackStateChange(PlayerListener.TrackState.STOP);
-            try {
-                mp.stop();
-            } finally {
-                mp.release();
-            }
-            state.setTrackPosition(0);
-        }
+        player.stop();
+        player.release();
+
         service.stopForeground(true);
         if (mayStopService && serviceStarted) {
             service.stopSelf();
         }
-        saveObject(state);
-        saveObject(currentInfo);
+
+        state.setTrackPosition(0);
+        saveObject(state, PlayerState.class);
+        saveObject(player.getInfo(), TrackInfo.class);
         pausedByFocusLoss = false;
     }
 
     private void changeFolder(int delta) {
         loadFolder(delta);
+        stop(false);
         startPlayback();
     }
 
@@ -400,7 +353,7 @@ class PlayerControl extends Binder
         }
 
         state.setCurrentTrack(next);
-        state.setTrackPosition(0);
+        stop(false);
         startPlayback();
     }
 
@@ -435,71 +388,30 @@ class PlayerControl extends Binder
             track = state.getTracks().get(state.getCurrentTrack());
         }
 
-        // Prepare the next track.
-        MediaPlayer mp;
-        if (track.equals(nextTrack)) {
-            mp = nextPlayer;
-        } else {
-            if (nextPlayer != null) {
-                nextPlayer.release();
-            }
-            mp = preparePlayer(track);
-            if (mp == null) {
-                return;
-            }
-        }
-        nextPlayer = null;
-
-        // Stop the current track.
-        stop(false);
-
-        // Start playback.
-        if (state.getTrackPosition() > 0 &&
-            state.getTrackPosition() < mp.getDuration()) {
-            mp.seekTo(state.getTrackPosition());
-        }
-        mp.start();
-        current.set(mp);
-
-        // Load track metadata.
-        MediaMetadataRetriever md = new MediaMetadataRetriever();
+        Player player;
         try {
-            md.setDataSource(track);
-            TrackInfo tinfo = new TrackInfo(md, mp.getDuration());
-            if (currentInfo != null &&
-                state.getCurrentTrack() > 0 &&
-                tinfo.getAlbum().equals(currentInfo.getAlbum())) {
-                tinfo.setArtwork(currentInfo.getArtwork());
-            }
-            currentInfo = tinfo;
-        } finally {
-            md.release();
+            player = new Player(service, track, null, listeners);
+        } catch (IOException ioe) {
+            Log.warn("Error loading player: %s", ioe.getMessage());
+            return;
         }
 
-        // Load artwork for album.
-        if (currentInfo.getArtwork() == null) {
-            try {
-                String criteria = String.format("%s = '%s' AND %s = '%s'",
-                    AlbumColumns.ARTIST, currentInfo.getArtist(),
-                    AlbumColumns.ALBUM, currentInfo.getAlbum());
-
-                Cursor cursor = service.getContentResolver().query(
-                    Albums.EXTERNAL_CONTENT_URI,
-                    new String[] { AlbumColumns.ALBUM_ART },
-                    criteria,
-                    null,
-                    null);
-                if (cursor != null) {
-                    cursor.moveToFirst();
-                    currentInfo.setArtwork(cursor.getString(0));
-                } else {
-                    currentInfo.setArtwork(null);
-                }
-            } catch (Exception e) {
-                Log.warn("Error querying artwork: %s: %s",
-                    e.getClass().getName(), e.getMessage());
-            }
+        TrackInfo info = loadObject(TrackInfo.class);
+        if (info != null && track.equals(info.getPath())) {
+            player.setInfo(info);
+        } else {
+            saveObject(null, TrackInfo.class);
         }
+
+        int startPos = 0;
+        if (state.getTrackPosition() > 0 &&
+            state.getTrackPosition() < player.getInfo().getDuration()) {
+            startPos = state.getTrackPosition();
+        }
+
+        player.setOnCompletionListener(this);
+        player.play(startPos);
+        current.set(player);
 
         // Put service in foreground.
         if (!serviceStarted) {
@@ -509,15 +421,18 @@ class PlayerControl extends Binder
         }
 
         pausedByFocusLoss = false;
-        fireTrackStateChange(PlayerListener.TrackState.PLAY);
-        updateTrackInfo();
-        setUpNextPlayer();
+        showNotification(player);
+        state.setTrackPosition(0);
+        saveObject(state, PlayerState.class);
+        saveObject(player.getInfo(), TrackInfo.class);
+        setNextTrack(player);
     }
 
-    private void showNotification() {
-        String state = current.get().isPlaying() ? "Playing" : "Paused";
+    private void showNotification(Player player) {
+        String state = player.isPlaying() ? "Playing" : "Paused";
+        TrackInfo info = player.getInfo();
         String msg = String.format("%s: %s - %s",
-            state, currentInfo.getArtist(), currentInfo.getTitle());
+            state, info.getArtist(), info.getTitle());
         Notification notification = new Notification(
             R.drawable.ashuffler, msg, System.currentTimeMillis());
 
@@ -530,39 +445,50 @@ class PlayerControl extends Binder
         service.startForeground(ONGOING_NOTIFICATION, notification);
     }
 
-    private void fireTrackStateChange(PlayerListener.TrackState newState) {
-        synchronized (listeners) {
-            for (PlayerListener pl : listeners) {
-                pl.trackStateChanged(state, currentInfo, newState);
-            }
-        }
-    }
-
     private void setAudioFocus(boolean focused) {
-        MediaPlayer mp = current.get();
+        Player player = current.get();
         if (focused) {
             if (pausedByFocusLoss) {
-                if (mp != null) {
-                    mp.start();
-                    fireTrackStateChange(PlayerListener.TrackState.PLAY);
+                if (player != null) {
+                    player.playPause();
                 }
                 pausedByFocusLoss = false;
             }
         } else {
-            if (mp != null && mp.isPlaying()) {
-                mp.pause();
-                fireTrackStateChange(PlayerListener.TrackState.PAUSE);
+            if (player != null && player.isPlaying()) {
+                player.pause();
                 pausedByFocusLoss = true;
             }
         }
     }
 
+    private void setNextTrack(Player player) {
+        int nextIdx = state.getCurrentTrack() + 1;
+        if (nextIdx >= state.getTracks().size()) {
+            return;
+        }
+
+        try {
+            String nextPath = state.getTracks().get(nextIdx);
+            player.setNext(nextPath);
+        } catch (IOException ioe) {
+            Log.warn("Failed to initialize next track: %s",
+                ioe.getMessage());
+        }
+    }
+
     @Override
     public void onCompletion(MediaPlayer mp) {
-        fireTrackStateChange(PlayerListener.TrackState.COMPLETE);
-        current.set(null);
-        mp.release();
-        runCommand(Command.CONTINUE);
+        Player player = current.get();
+        Player next = player.complete();
+        if (next != null) {
+            state.setCurrentTrack(state.getCurrentTrack() + 1);
+            next.setOnCompletionListener(this);
+            setNextTrack(next);
+            current.set(next);
+        } else {
+            changeTrack(1);
+        }
     }
 
     @Override
@@ -576,9 +502,6 @@ class PlayerControl extends Binder
 
     @Override
     public void run() {
-        // Make sure the state is loaded.
-        getState();
-
         if (!pausedByFocusLoss && isStorageAvailable()) {
             audioManager.requestAudioFocus(this,
                 AudioManager.STREAM_MUSIC,
@@ -606,17 +529,11 @@ class PlayerControl extends Binder
 
                 String[] args = intent.getStringArrayExtra(CMD_ARGS);
                 switch (cmd) {
-                case CONTINUE:
-                    continueToNextTrack();
-                    break;
                 case NEXT_FOLDER:
                     changeFolder(1);
                     break;
                 case NEXT_TRACK:
                     changeTrack(1);
-                    break;
-                case PAUSE:
-                    pause();
                     break;
                 case PREV_FOLDER:
                     changeFolder(-1);
@@ -656,21 +573,19 @@ class PlayerControl extends Binder
     }
 
     private void stopAndSave() {
-        TrackInfo trackInfo = currentInfo;
-        if (current.get() != null) {
-            int pos = current.get().getCurrentPosition();
+        Player player = current.get();
+        if (player != null) {
+            TrackInfo info = player.getInfo();
+            int pos = info.getElapsedTime();
             stop(true);
             state.setTrackPosition(pos);
-            saveObject(currentInfo);
         }
-        saveObject(state);
-        saveObject(trackInfo);
+        saveObject(state, PlayerState.class);
     }
 
     private void checkFolders(boolean force) {
         String currentFolder = null;
         String currentTrack = null;
-        int trackPosition = state.getTrackPosition();
         if (hasTracks()) {
             currentFolder = state.getFolders().get(state.getCurrentFolder());
             if (state.getTracks() != null) {
@@ -690,7 +605,6 @@ class PlayerControl extends Binder
             state.setLastModified(System.currentTimeMillis());
             state.setTracks(null);
             state.setCurrentTrack(0);
-            state.setTrackPosition(0);
             if (folders.isEmpty()) {
                 Log.warn("No playable folders found in root dir.");
                 return;
@@ -724,7 +638,6 @@ class PlayerControl extends Binder
             for (int i = 0; i < state.getTracks().size(); i++) {
                 if (state.getTracks().get(i).equals(currentTrack)) {
                     state.setCurrentTrack(i);
-                    state.setTrackPosition(trackPosition);
                 }
             }
         }
@@ -795,12 +708,12 @@ class PlayerControl extends Binder
         }
     }
 
-    private void saveObject(Serializable object) {
-        if (object == null) {
-            return;
+    private void saveObject(Serializable object, Class<?> klass) {
+        if (object != null && !object.getClass().equals(klass)) {
+            throw new IllegalArgumentException();
         }
 
-        String fileName = object.getClass().getName();
+        String fileName = klass.getName();
         if (object == null) {
             service.deleteFile(fileName);
             return;
@@ -828,104 +741,6 @@ class PlayerControl extends Binder
     private boolean hasTracks() {
         return state != null && state.getTracks() != null &&
             !state.getTracks().isEmpty();
-    }
-
-    private void continueToNextTrack() {
-        if (nextPlayer == null) {
-            changeTrack(1);
-            return;
-        }
-        state.setCurrentTrack(state.getCurrentTrack() + 1);
-        current.set(nextPlayer);
-        nextPlayer = null;
-        updateTrackInfo();
-        fireTrackStateChange(PlayerListener.TrackState.PLAY);
-        setUpNextPlayer();
-    }
-
-    private void setUpNextPlayer() {
-        int next = state.getCurrentTrack() + 1;
-        if (next >= state.getTracks().size()) {
-            return;
-        }
-
-        String nextPath = state.getTracks().get(next);
-        MediaPlayer nextPlayer = preparePlayer(nextPath);
-        if (nextPlayer == null) {
-            return;
-        }
-
-        if (current.get() == null) {
-            Log.warn("ShouldNotReachHere(NoCurrentPlayer)");
-            return;
-        }
-
-        current.get().setNextMediaPlayer(nextPlayer);
-        this.nextPlayer = nextPlayer;
-        this.nextTrack = nextPath;
-    }
-
-    private void updateTrackInfo() {
-        String track = state.getTracks().get(state.getCurrentTrack());
-        MediaPlayer mp = current.get();
-
-        // Load track metadata.
-        MediaMetadataRetriever md = new MediaMetadataRetriever();
-        try {
-            md.setDataSource(track);
-            TrackInfo tinfo = new TrackInfo(md, mp.getDuration());
-            if (currentInfo != null &&
-                state.getCurrentTrack() > 0 &&
-                tinfo.getAlbum().equals(currentInfo.getAlbum())) {
-                tinfo.setArtwork(currentInfo.getArtwork());
-            }
-            currentInfo = tinfo;
-        } finally {
-            md.release();
-        }
-
-        // Load artwork for album.
-        if (currentInfo.getArtwork() == null) {
-            try {
-                String criteria = String.format("%s = '%s' AND %s = '%s'",
-                    AlbumColumns.ARTIST, currentInfo.getArtist(),
-                    AlbumColumns.ALBUM, currentInfo.getAlbum());
-
-                Cursor cursor = service.getContentResolver().query(
-                    Albums.EXTERNAL_CONTENT_URI,
-                    new String[] { AlbumColumns.ALBUM_ART },
-                    criteria,
-                    null,
-                    null);
-                if (cursor != null) {
-                    cursor.moveToFirst();
-                    currentInfo.setArtwork(cursor.getString(0));
-                } else {
-                    currentInfo.setArtwork(null);
-                }
-            } catch (Exception e) {
-                Log.warn("Error querying artwork: %s: %s",
-                    e.getClass().getName(), e.getMessage());
-            }
-        }
-
-        showNotification();
-        saveObject(state);
-        saveObject(currentInfo);
-    }
-
-    private MediaPlayer preparePlayer(String track) {
-        MediaPlayer mp = new MediaPlayer();
-        try {
-            mp.setDataSource(track);
-            mp.prepare();
-            mp.setOnCompletionListener(this);
-            return mp;
-        } catch (IOException ioe) {
-            Log.warn("Cannot load new track: %s", ioe.getMessage());
-            mp.release();
-            return null;
-        }
     }
 
     /**

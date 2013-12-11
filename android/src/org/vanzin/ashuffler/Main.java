@@ -101,12 +101,7 @@ public class Main extends Activity
 
                 boolean isPlaying = control.isPlaying();
                 updatePlayControls(isPlaying);
-
-                int position = control.getElapsedTime();
-                if (position == 0) {
-                    position = control.getState().getTrackPosition();
-                }
-                updateTimes(position);
+                updateTimes(isPlaying ? control.getCurrentInfo().getElapsedTime() : 0);
                 if (isPlaying) {
                     setupProgressTimer();
                 }
@@ -121,8 +116,7 @@ public class Main extends Activity
     }
 
     @Override
-    public void trackStateChanged(final PlayerState state,
-                                  final TrackInfo track,
+    public void trackStateChanged(final TrackInfo track,
                                   final TrackState trackState) {
         runOnUiThread(new Runnable() {
             @Override

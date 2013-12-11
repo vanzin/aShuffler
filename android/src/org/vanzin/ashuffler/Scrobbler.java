@@ -40,8 +40,7 @@ class Scrobbler implements PlayerListener {
     }
 
     @Override
-    public void trackStateChanged(PlayerState state,
-                                  TrackInfo track,
+    public void trackStateChanged(TrackInfo track,
                                   PlayerListener.TrackState trackState) {
         switch (trackState) {
         case COMPLETE:

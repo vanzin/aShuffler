@@ -32,12 +32,10 @@ public interface PlayerListener {
     /**
      * Called when the playback state of the current track changes.
      *
-     * @param state The player state.
      * @param track The affected track info.
      * @param trackState The new playback state of the track.
      */
-    void trackStateChanged(PlayerState state,
-                           TrackInfo track,
+    void trackStateChanged(TrackInfo track,
                            TrackState trackState);
 
 }

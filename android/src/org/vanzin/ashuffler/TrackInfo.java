@@ -27,8 +27,9 @@ import java.io.Serializable;
  */
 class TrackInfo implements Serializable {
 
-    public static final long serialVersionUID = 4735383483858487457L;
+    public static final long serialVersionUID = 4735383483858487458L;
 
+    private final String path;
     private final String title;
     private final String album;
     private final String artist;
@@ -36,8 +37,10 @@ class TrackInfo implements Serializable {
     private final int discNumber;
     private final int duration;
     private String artwork;
+    private transient int elapsedTime;
 
-    public TrackInfo(MediaMetadataRetriever md, int duration) {
+    public TrackInfo(String path, MediaMetadataRetriever md, int duration) {
+        this.path = path;
         this.title =
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
         this.album =
@@ -55,6 +58,10 @@ class TrackInfo implements Serializable {
         } else {
             this.discNumber = -1;
         }
+    }
+
+    public String getPath() {
+        return path;
     }
 
     public String getTitle() {
@@ -87,6 +94,14 @@ class TrackInfo implements Serializable {
 
     public void setArtwork(String artwork) {
         this.artwork = artwork;
+    }
+
+    public int getElapsedTime() {
+        return elapsedTime;
+    }
+
+    public void setElapsedTime(int time) {
+        this.elapsedTime = time;
     }
 
 }
