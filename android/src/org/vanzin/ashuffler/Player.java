@@ -143,7 +143,7 @@ public class Player {
         if (next != null) {
             Player nextPlayer = new Player(service, next, nextTrack,
                 nextInfo, listeners);
-            nextPlayer.fireTrackStateChange(PlayerListener.TrackState.PLAY);
+            nextPlayer.play(0);
             return nextPlayer;
         }
 
@@ -155,7 +155,7 @@ public class Player {
         next.setDataSource(track);
         next.prepare();
         nextInfo = loadInfo(track, next);
-        current.setNextMediaPlayer(next);
+        //current.setNextMediaPlayer(next);
         this.next = next;
         this.nextTrack = nextTrack;
     }
@@ -187,8 +187,12 @@ public class Player {
                     null,
                     null);
                 if (cursor != null) {
-                    cursor.moveToFirst();
-                    info.setArtwork(cursor.getString(0));
+                    try {
+                        cursor.moveToFirst();
+                        info.setArtwork(cursor.getString(0));
+                    } finally {
+                        cursor.close();
+                    }
                 } else {
                     info.setArtwork(null);
                 }

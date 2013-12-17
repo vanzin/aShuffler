@@ -42,7 +42,7 @@ public class PlayerService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         init();
-        if (intent.getAction() != null) {
+        if (intent != null && intent.getAction() != null) {
             control.runIntent(intent);
         }
         return START_STICKY;

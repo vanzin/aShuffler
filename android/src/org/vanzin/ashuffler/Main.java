@@ -189,8 +189,16 @@ public class Main extends Activity
             return;
         }
         int position = elapsed / 1000;
-        int progress = position * 100 * 1000 / current.getDuration();
-        int remaining = current.getDuration() / 1000 - position;
+        int progress;
+        int remaining;
+        if (position >= current.getDuration()) {
+            position = current.getDuration();
+            progress = 100;
+            remaining = 0;
+        } else {
+            progress = position * 100 * 1000 / current.getDuration();
+            remaining = current.getDuration() / 1000 - position;
+        }
 
         getTextView(R.id.elapsed).setText(secondsToStr(position));
         getTextView(R.id.remaining).setText("-" + secondsToStr(remaining));

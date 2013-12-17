@@ -215,6 +215,13 @@ class PlayerControl extends Binder
         }
     }
 
+    private void pause() {
+        Player player = current.get();
+        if (player != null) {
+            player.pause();
+        }
+    }
+
     /* Playback control. */
 
     /**
@@ -233,6 +240,7 @@ class PlayerControl extends Binder
         STOP_AND_SAVE,
         STORAGE_MOUNTED,
         UNSET_AUDIO_FOCUS,
+        FINISH_CURRENT,
     }
 
     /**
@@ -315,10 +323,11 @@ class PlayerControl extends Binder
     }
 
     private void stop(boolean mayStopService) {
-        Player player = current.get();
-        current.set(null);
-        player.stop();
-        player.release();
+        Player player = current.getAndSet(null);
+        if (player != null) {
+            player.stop();
+            player.release();
+        }
 
         service.stopForeground(true);
         if (mayStopService && serviceStarted) {
@@ -327,7 +336,8 @@ class PlayerControl extends Binder
 
         state.setTrackPosition(0);
         saveObject(state, PlayerState.class);
-        saveObject(player.getInfo(), TrackInfo.class);
+        saveObject(player != null ? player.getInfo() : null,
+            TrackInfo.class);
         pausedByFocusLoss = false;
     }
 
@@ -477,9 +487,8 @@ class PlayerControl extends Binder
         }
     }
 
-    @Override
-    public void onCompletion(MediaPlayer mp) {
-        Player player = current.get();
+    private void finishCurrentTrack() {
+        Player player = current.getAndSet(null);
         Player next = player.complete();
         if (next != null) {
             state.setCurrentTrack(state.getCurrentTrack() + 1);
@@ -489,6 +498,11 @@ class PlayerControl extends Binder
         } else {
             changeTrack(1);
         }
+    }
+
+    @Override
+    public void onCompletion(MediaPlayer mp) {
+        runCommand(Command.FINISH_CURRENT);
     }
 
     @Override
@@ -544,6 +558,9 @@ class PlayerControl extends Binder
                 case PLAY_PAUSE:
                     playPause();
                     break;
+                case PAUSE:
+                    pause();
+                    break;
                 case SEEK:
                     seek(args);
                     break;
@@ -561,6 +578,9 @@ class PlayerControl extends Binder
                     break;
                 case UNSET_AUDIO_FOCUS:
                     setAudioFocus(false);
+                    break;
+                case FINISH_CURRENT:
+                    finishCurrentTrack();
                     break;
                 default:
                     Log.warn("Unknown command: " + cmd);
