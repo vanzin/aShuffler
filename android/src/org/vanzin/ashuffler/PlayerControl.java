@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -98,6 +99,7 @@ class PlayerControl extends Binder
     private boolean serviceStarted;
     private PlayerState state;
     private List<PlayerListener> listeners;
+    private Future<?> stopTask;
 
     /**
      * Initializes the player control.
@@ -211,9 +213,31 @@ class PlayerControl extends Binder
 
     private void pause() {
         Player player = current.get();
-        if (player != null) {
+        if (player != null && player.isPlaying()) {
             player.pause();
+            setupStopTask();
         }
+    }
+
+    private void setupStopTask() {
+        if (stopTask != null) {
+            Log.warn("Stop task already scheduled!");
+            stopTask.cancel(false);
+        }
+
+        Intent intent = new Intent();
+        intent.setAction(Command.STOP_AND_SAVE.name());
+        stopTask = executor.schedule(new IntentTask(intent),
+            30, TimeUnit.SECONDS);
+    }
+
+    private void clearStopTask() {
+        if (stopTask == null) {
+            Log.warn("Clearing non-existant stop task.");
+            return;
+        }
+        stopTask.cancel(false);
+        stopTask = null;
     }
 
     /* Playback control. */
@@ -279,7 +303,11 @@ class PlayerControl extends Binder
 
         Player player = current.get();
         if (player != null) {
-            player.playPause();
+            if (!player.playPause()) {
+                setupStopTask();
+            } else {
+                clearStopTask();
+            }
             showNotification(player);
             pausedByFocusLoss = false;
         } else {
