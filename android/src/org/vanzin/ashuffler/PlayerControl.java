@@ -22,15 +22,10 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.database.Cursor;
 import android.media.AudioManager;
-import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
-import android.provider.MediaStore.Audio.Albums;
-import android.provider.MediaStore.Audio.AlbumColumns;
 import android.os.Binder;
 import android.os.Environment;
-import android.os.IBinder;
 
 import java.io.File;
 import java.io.InputStream;
@@ -40,10 +35,11 @@ import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.Collections;
-import java.util.List;
 import java.util.LinkedList;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -84,15 +80,13 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 class PlayerControl extends Binder
     implements AudioManager.OnAudioFocusChangeListener,
-               MediaPlayer.OnCompletionListener,
-               Runnable {
+               MediaPlayer.OnCompletionListener {
 
     private static final int ONGOING_NOTIFICATION = 10001;
     private static final String CMD_ARGS = "cmd_args";
 
     private final PlayerService service;
-    private final Thread worker;
-    private final BlockingQueue<Intent> commands;
+    private final ScheduledExecutorService executor;
     private final BroadcastReceiver storageReceiver;
     private final BroadcastReceiver headsetReceiver;
     private final BroadcastReceiver shutdownReceiver;
@@ -113,7 +107,6 @@ class PlayerControl extends Binder
     public PlayerControl(PlayerService service) {
         this.service = service;
         this.listeners = new LinkedList<PlayerListener>();
-        this.commands = new LinkedBlockingQueue<Intent>();
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
         this.remoteControl = new ComponentName(service.getPackageName(),
@@ -148,8 +141,7 @@ class PlayerControl extends Binder
         }
         checkFolders(false);
 
-        worker = new Thread(this);
-        worker.start();
+        executor = Executors.newSingleThreadScheduledExecutor();
     }
 
     /**
@@ -182,14 +174,16 @@ class PlayerControl extends Binder
     /**
      * Shutdown the player.
      * <p>
-     * Stop the worker thread, stop playback, and save all state.
+     * Stop the executor, stop playback, and save all state.
      */
     public void shutdown() {
-        worker.interrupt();
+        executor.shutdownNow();
         try {
-            worker.join();
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                Log.warn("Failed to shut down executor.");
+            }
         } catch (InterruptedException ie) {
-            Log.warn("Wait interrupted.");
+            Log.warn("Interrupted while waiting for termination.");
         }
         stop(true);
         saveObject(state, PlayerState.class);
@@ -261,7 +255,7 @@ class PlayerControl extends Binder
      * Raw command interface. Try not to use it.
      */
     public void runIntent(Intent intent) {
-        commands.offer(intent);
+        executor.submit(new IntentTask(intent));
     }
 
     /**
@@ -514,81 +508,72 @@ class PlayerControl extends Binder
         }
     }
 
-    @Override
-    public void run() {
+    private void processIntent(Intent intent) {
         if (!pausedByFocusLoss && isStorageAvailable()) {
             audioManager.requestAudioFocus(this,
                 AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN);
         }
 
-        while (true) {
-            try {
-                Intent intent = commands.take();
-                Command cmd;
-                try {
-                    cmd = Command.valueOf(intent.getAction());
-                } catch (IllegalArgumentException iae) {
-                    Log.warn("Unknown command: %s", intent.getAction());
-                    continue;
-                }
+        Command cmd;
+        try {
+            cmd = Command.valueOf(intent.getAction());
+        } catch (IllegalArgumentException iae) {
+            Log.warn("Unknown command: %s", intent.getAction());
+            return;
+        }
 
-                // If storage is not available, we only allow
-                // "STORAGE_MOUNTED" to go through, so that we avoid
-                // trying to change player state or access the
-                // underlying files in that state.
-                if (!isStorageAvailable() && cmd != Command.STORAGE_MOUNTED) {
-                    return;
-                }
+        // If storage is not available, we only allow
+        // "STORAGE_MOUNTED" to go through, so that we avoid
+        // trying to change player state or access the
+        // underlying files in that state.
+        if (!isStorageAvailable() && cmd != Command.STORAGE_MOUNTED) {
+            return;
+        }
 
-                String[] args = intent.getStringArrayExtra(CMD_ARGS);
-                switch (cmd) {
-                case NEXT_FOLDER:
-                    changeFolder(1);
-                    break;
-                case NEXT_TRACK:
-                    changeTrack(1);
-                    break;
-                case PREV_FOLDER:
-                    changeFolder(-1);
-                    break;
-                case PREV_TRACK:
-                    changeTrack(-1);
-                    break;
-                case PLAY_PAUSE:
-                    playPause();
-                    break;
-                case PAUSE:
-                    pause();
-                    break;
-                case SEEK:
-                    seek(args);
-                    break;
-                case SET_AUDIO_FOCUS:
-                    setAudioFocus(true);
-                    break;
-                case STOP:
-                    stop(true);
-                    break;
-                case STOP_AND_SAVE:
-                    stopAndSave();
-                    break;
-                case STORAGE_MOUNTED:
-                    checkFolders(false);
-                    break;
-                case UNSET_AUDIO_FOCUS:
-                    setAudioFocus(false);
-                    break;
-                case FINISH_CURRENT:
-                    finishCurrentTrack();
-                    break;
-                default:
-                    Log.warn("Unknown command: " + cmd);
-                }
-            } catch (InterruptedException ie) {
-                Thread.interrupted();
-                break;
-            }
+        String[] args = intent.getStringArrayExtra(CMD_ARGS);
+        switch (cmd) {
+        case NEXT_FOLDER:
+            changeFolder(1);
+            break;
+        case NEXT_TRACK:
+            changeTrack(1);
+            break;
+        case PREV_FOLDER:
+            changeFolder(-1);
+            break;
+        case PREV_TRACK:
+            changeTrack(-1);
+            break;
+        case PLAY_PAUSE:
+            playPause();
+            break;
+        case PAUSE:
+            pause();
+            break;
+        case SEEK:
+            seek(args);
+            break;
+        case SET_AUDIO_FOCUS:
+            setAudioFocus(true);
+            break;
+        case STOP:
+            stop(true);
+            break;
+        case STOP_AND_SAVE:
+            stopAndSave();
+            break;
+        case STORAGE_MOUNTED:
+            checkFolders(false);
+            break;
+        case UNSET_AUDIO_FOCUS:
+            setAudioFocus(false);
+            break;
+        case FINISH_CURRENT:
+            finishCurrentTrack();
+            break;
+        default:
+            Log.warn("Unknown command: " + cmd);
         }
     }
 
@@ -812,6 +797,24 @@ class PlayerControl extends Binder
         @Override
         public void onReceive(Context context, Intent intent) {
             runCommand(Command.STOP_AND_SAVE);
+        }
+
+    }
+
+    /**
+     * Submittable task for processing intents.
+     */
+    private class IntentTask implements Runnable {
+
+        private final Intent intent;
+
+        IntentTask(Intent intent) {
+            this.intent = intent;
+        }
+
+        @Override
+        public void run() {
+            processIntent(intent);
         }
 
     }
