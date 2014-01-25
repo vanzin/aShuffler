@@ -18,6 +18,7 @@ package org.vanzin.ashuffler;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.database.Cursor;
+import android.os.PowerManager;
 import android.provider.MediaStore.Audio.Albums;
 import android.provider.MediaStore.Audio.AlbumColumns;
 
@@ -55,6 +56,7 @@ public class Player {
         this.service = service;
         this.state = State.NEW;
         this.current = new MediaPlayer();
+        this.current.setWakeMode(service, PowerManager.PARTIAL_WAKE_LOCK);
         this.current.setDataSource(track);
         this.track = track;
         this.listeners = listeners;
@@ -152,6 +154,7 @@ public class Player {
 
     public synchronized void setNext(String track) throws IOException {
         MediaPlayer next = new MediaPlayer();
+        next.setWakeMode(service, PowerManager.PARTIAL_WAKE_LOCK);
         next.setDataSource(track);
         next.prepare();
         nextInfo = loadInfo(track, next);
