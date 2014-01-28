@@ -47,14 +47,14 @@ class TrackInfo implements Serializable {
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
         this.artist =
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
-        this.trackNumber = Integer.parseInt(
+        this.trackNumber = parseInt(
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER));
         this.duration = duration;
 
         String discNumberStr =
             md.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER);
         if (discNumberStr != null) {
-            this.discNumber = Integer.parseInt(discNumberStr);
+            this.discNumber = parseInt(discNumberStr);
         } else {
             this.discNumber = -1;
         }
@@ -102,6 +102,15 @@ class TrackInfo implements Serializable {
 
     public void setElapsedTime(int time) {
         this.elapsedTime = time;
+    }
+
+    private static int parseInt(String intish) {
+        int idx = intish.indexOf("/");
+        if (idx == -1) {
+            idx = intish.indexOf("-");
+        }
+        return Integer.parseInt(
+            (idx >= 0) ? intish.substring(0, idx) : intish);
     }
 
 }
