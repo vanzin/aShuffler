@@ -96,6 +96,7 @@ class PlayerControl extends Binder
     private final AtomicReference<Player> current;
 
     private boolean pausedByFocusLoss;
+    private boolean registeredFocusListener;
     private boolean serviceStarted;
     private PlayerState state;
     private List<PlayerListener> listeners;
@@ -361,6 +362,10 @@ class PlayerControl extends Binder
         saveObject(player != null ? player.getInfo() : null,
             TrackInfo.class);
         pausedByFocusLoss = false;
+        if (registeredFocusListener) {
+            audioManager.abandonAudioFocus(this);
+            registeredFocusListener = false;
+        }
     }
 
     private void changeFolder(int delta) {
@@ -412,6 +417,12 @@ class PlayerControl extends Binder
     }
 
     private void startPlayback() {
+        if (!registeredFocusListener) {
+            audioManager.requestAudioFocus(this,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN);
+            registeredFocusListener = true;
+        }
         String track = state.getTracks().get(state.getCurrentTrack());
         if (!new File(track).isFile()) {
             checkFolders(true);
@@ -537,12 +548,6 @@ class PlayerControl extends Binder
     }
 
     private void processIntent(Intent intent) {
-        if (!pausedByFocusLoss && isStorageAvailable()) {
-            audioManager.requestAudioFocus(this,
-                AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN);
-        }
-
         Command cmd;
         try {
             cmd = Command.valueOf(intent.getAction());
