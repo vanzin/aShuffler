@@ -28,6 +28,7 @@ import android.os.Binder;
 import android.os.Environment;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -732,6 +733,8 @@ class PlayerControl extends Binder
         try {
             in = service.openFileInput(fileName);
             return (T) new ObjectInputStream(in).readObject();
+        } catch (FileNotFoundException fnf) {
+            return null;
         } catch (Exception e) {
             Log.info("Cannot load object from file %s: %s", fileName, e.getMessage());
             return null;
