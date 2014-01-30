@@ -189,12 +189,9 @@ class PlayerControl extends Binder
         } catch (InterruptedException ie) {
             Log.warn("Interrupted while waiting for termination.");
         }
-        stop(true);
-        saveObject(state, PlayerState.class);
 
-        Player player = current.get();
-        if (player != null) {
-            saveObject(player.getInfo(), TrackInfo.class);
+        if (current.get() != null) {
+            stopAndSave();
         }
         service.unregisterReceiver(storageReceiver);
         service.unregisterReceiver(headsetReceiver);
@@ -613,13 +610,17 @@ class PlayerControl extends Binder
 
     private void stopAndSave() {
         Player player = current.get();
+        TrackInfo info = null;
         if (player != null) {
-            TrackInfo info = player.getInfo();
-            int pos = info.getElapsedTime();
-            stop(true);
-            state.setTrackPosition(pos);
+            info = player.save();
+            state.setTrackPosition(info.getElapsedTime());
         }
+        saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);
+
+        if (stopTask != null) {
+            clearStopTask();
+        }
     }
 
     private void checkFolders(boolean force) {

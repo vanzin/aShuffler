@@ -101,7 +101,8 @@ public class Main extends Activity
 
                 boolean isPlaying = control.isPlaying();
                 updatePlayControls(isPlaying);
-                updateTimes(isPlaying ? control.getCurrentInfo().getElapsedTime() : 0);
+                updateTimes(control.getCurrentInfo() != null ?
+                    control.getCurrentInfo().getElapsedTime() : 0);
                 if (isPlaying) {
                     setupProgressTimer();
                 }

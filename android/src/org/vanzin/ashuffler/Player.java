@@ -129,6 +129,15 @@ public class Player {
         }
     }
 
+    public synchronized TrackInfo save() {
+        TrackInfo info = null;
+        if (isPlaying()) {
+            current.pause();
+            current.stop();
+        }
+        return info;
+    }
+
     public synchronized void release() {
         current.release();
         if (next != null) {
