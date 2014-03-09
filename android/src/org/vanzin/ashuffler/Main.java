@@ -47,7 +47,7 @@ public class Main extends Activity
     implements PlayerListener, ServiceConnection,
                  SeekBar.OnSeekBarChangeListener {
 
-    private PlayerControl control;
+    private volatile PlayerControl control;
     private String currentArtwork;
 
     private Timer progressTimer;
