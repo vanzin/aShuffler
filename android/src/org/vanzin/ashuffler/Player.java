@@ -22,6 +22,7 @@ import android.os.PowerManager;
 import android.provider.MediaStore.Audio.Albums;
 import android.provider.MediaStore.Audio.AlbumColumns;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
@@ -75,6 +76,10 @@ public class Player {
         this.info = info;
         this.listeners = listeners;
         this.state = State.PREPARED;
+    }
+
+    public synchronized boolean isValid() {
+      return new File(track).isFile();
     }
 
     public synchronized void pause() {

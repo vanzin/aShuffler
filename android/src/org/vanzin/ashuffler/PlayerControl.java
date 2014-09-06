@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2013 Marcelo Vanzin
+ * Copyright 2012-2014 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -35,9 +35,14 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -60,8 +65,6 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <ul>
  *   <li>Loading track metadata.</li>
- *   <li>Monitoring storage state and checking when the monitored
- *   folders change.</li>
  *   <li>Responding to audio focus events so playback is played
  *   when incoming calls are coming (or other similar events).</li>
  *   <li>Scrobbling track info using the Scrobble Droid API.</li>
@@ -89,7 +92,6 @@ class PlayerControl extends Binder
 
     private final PlayerService service;
     private final ScheduledExecutorService executor;
-    private final BroadcastReceiver storageReceiver;
     private final BroadcastReceiver headsetReceiver;
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
@@ -117,15 +119,8 @@ class PlayerControl extends Binder
             RemoteControlMonitor.class.getName());
         this.current = new AtomicReference<Player>();
 
-        // Instantiate the storage broadcast receiver.
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_MEDIA_EJECT);
-        filter.addAction(Intent.ACTION_MEDIA_MOUNTED);
-        this.storageReceiver = new StorageMonitor();
-        service.registerReceiver(storageReceiver, filter);
-
         // Instantiate the headset broadcast receiver.
-        filter = new IntentFilter();
+        IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_HEADSET_PLUG);
         this.headsetReceiver = new HeadsetMonitor();
         service.registerReceiver(headsetReceiver, filter);
@@ -143,7 +138,7 @@ class PlayerControl extends Binder
         if (state == null) {
             state = new PlayerState();
         }
-        checkFolders(false);
+        checkFolders();
 
         executor = Executors.newSingleThreadScheduledExecutor();
     }
@@ -168,14 +163,6 @@ class PlayerControl extends Binder
     }
 
     /**
-     * @return Whether the SD card is currently mounted.
-     */
-    public boolean isStorageAvailable() {
-        return Environment.MEDIA_MOUNTED.equals(
-            Environment.getExternalStorageState());
-    }
-
-    /**
      * Shutdown the player.
      * <p>
      * Stop the executor, stop playback, and save all state.
@@ -193,7 +180,6 @@ class PlayerControl extends Binder
         if (current.get() != null) {
             stopAndSave();
         }
-        service.unregisterReceiver(storageReceiver);
         service.unregisterReceiver(headsetReceiver);
         service.unregisterReceiver(shutdownReceiver);
     }
@@ -255,7 +241,6 @@ class PlayerControl extends Binder
         SET_AUDIO_FOCUS,
         STOP,
         STOP_AND_SAVE,
-        STORAGE_MOUNTED,
         UNSET_AUDIO_FOCUS,
         FINISH_CURRENT,
     }
@@ -293,7 +278,7 @@ class PlayerControl extends Binder
 
     private void playPause() {
         if (!hasTracks()) {
-            checkFolders(true);
+            checkFolders();
             if (!hasTracks()) {
                 Log.warn("No music found to play.");
                 return;
@@ -302,7 +287,9 @@ class PlayerControl extends Binder
 
         Player player = current.get();
         if (player != null) {
-            if (!player.playPause()) {
+            if (!player.isValid()) {
+              startPlayback();
+            } else if (!player.playPause()) {
                 setupStopTask();
             } else {
                 clearStopTask();
@@ -393,6 +380,9 @@ class PlayerControl extends Binder
     }
 
     private void loadFolder(int delta) {
+        // Check storage for changes, just in case.
+        checkFolders();
+
         int next = state.getCurrentFolder() + delta;
         if (next < 0) {
             next = state.getFolders().size() +
@@ -423,9 +413,7 @@ class PlayerControl extends Binder
         }
         String track = state.getTracks().get(state.getCurrentTrack());
         if (!new File(track).isFile()) {
-            checkFolders(true);
-            state.setCurrentTrack(0);
-            state.setCurrentFolder(0);
+            checkFolders();
             track = state.getTracks().get(state.getCurrentTrack());
         }
 
@@ -554,14 +542,6 @@ class PlayerControl extends Binder
             return;
         }
 
-        // If storage is not available, we only allow
-        // "STORAGE_MOUNTED" to go through, so that we avoid
-        // trying to change player state or access the
-        // underlying files in that state.
-        if (!isStorageAvailable() && cmd != Command.STORAGE_MOUNTED) {
-            return;
-        }
-
         String[] args = intent.getStringArrayExtra(CMD_ARGS);
         switch (cmd) {
         case NEXT_FOLDER:
@@ -594,9 +574,6 @@ class PlayerControl extends Binder
         case STOP_AND_SAVE:
             stopAndSave();
             break;
-        case STORAGE_MOUNTED:
-            checkFolders(false);
-            break;
         case UNSET_AUDIO_FOCUS:
             setAudioFocus(false);
             break;
@@ -623,83 +600,78 @@ class PlayerControl extends Binder
         }
     }
 
-    private void checkFolders(boolean force) {
-        String currentFolder = null;
-        String currentTrack = null;
-        if (hasTracks()) {
-            currentFolder = state.getFolders().get(state.getCurrentFolder());
-            if (state.getTracks() != null) {
-                currentTrack = state.getTracks().get(state.getCurrentTrack());
-            }
-        }
-
-        // Check to see if the storage timestamps have changed.
+    private void checkFolders() {
         File root = Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_MUSIC);
-        if (force || foldersNeedReload(root)) {
-            Log.info("Re-loading data from %s.", root.getAbsolutePath());
-            List<String> folders = new LinkedList<String>();
-            findChildFolders(root, folders);
-            Collections.shuffle(folders);
-            state.setFolders(folders);
-            state.setLastModified(System.currentTimeMillis());
-            state.setTracks(null);
-            state.setCurrentTrack(0);
-            if (folders.isEmpty()) {
-                Log.warn("No playable folders found in root dir.");
-                return;
+        Set<String> folders = new HashSet<String>();
+        findChildFolders(root, folders);
+
+        String currentFolder = state.getFolders().get(
+            state.getCurrentFolder());
+        String currentTrack = state.getTracks().get(
+            state.getCurrentTrack());
+
+        // Look at the current known folders, and keep the existing
+        // ones in the current order. We'll shuffle just the added
+        // ones at the end of the current list.
+        for (Iterator<String> it = state.getFolders().iterator();
+            it.hasNext(); ) {
+            String folder = it.next();
+            if (!folders.remove(folder)) {
+                it.remove();
             }
         }
 
-        // Check if the previous current folder exists in the list,
-        // set it as the first in the new list.
-        boolean currentRestored = false;
-        if (currentFolder != null) {
-            for (int i = 0; i < state.getFolders().size(); i++) {
-                if (state.getFolders().get(i).equals(currentFolder)) {
-                    state.getFolders().remove(i);
-                    state.getFolders().add(0, currentFolder);
+        List<String> newFolders = new ArrayList<String>(folders);
+        Collections.shuffle(newFolders);
+        state.getFolders().addAll(newFolders);
+
+        if (state.getFolders().isEmpty()) {
+            Log.warn("No playable folders found in root dir.");
+            return;
+        }
+
+        // Find the current folder in the new list, and the current
+        // track, and update the indices.
+        boolean found = false;
+        int idx = 0;
+        for (Iterator<String> it = state.getFolders().iterator();
+            it.hasNext(); ) {
+            if (it.next().equals(currentFolder)) {
+                found = true;
+                break;
+            }
+            idx++;
+        }
+
+        if (found) {
+            state.setCurrentFolder(idx);
+            List<String> tracks = buildTrackList(
+                state.getFolders().get(idx));
+            state.setTracks(tracks);
+
+            found = false;
+            idx = 0;
+            for (Iterator<String> it = tracks.iterator();
+                it.hasNext(); ) {
+                if (it.next().equals(currentTrack)) {
+                    found = true;
                     break;
                 }
+                idx++;
             }
-        }
 
-        // Load the track list if needed.
-        if (!hasTracks()) {
-            String folder = state.getFolders().get(state.getCurrentFolder());
-            List<String> tracks = buildTrackList(folder);
-            state.setTracks(tracks);
+            if (found) {
+              state.setCurrentTrack(idx);
+            }
+        } else {
+            state.setCurrentFolder(0);
             state.setCurrentTrack(0);
-        }
-
-        // If restoring the previously current folder, try to restore
-        // the track too.
-        if (currentTrack != null && currentRestored) {
-            for (int i = 0; i < state.getTracks().size(); i++) {
-                if (state.getTracks().get(i).equals(currentTrack)) {
-                    state.setCurrentTrack(i);
-                }
-            }
+            loadFolder(0);
         }
     }
 
-    private boolean foldersNeedReload(File root) {
-        if (root.lastModified() > state.getLastModified()) {
-            return true;
-        }
-        File[] children = root.listFiles();
-        if (children == null) {
-            return false;
-        }
-        for (File child : children) {
-            if (child.isDirectory() && foldersNeedReload(child)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void findChildFolders(File folder, List<String> folders) {
+    private void findChildFolders(File folder, Collection<String> folders) {
         boolean added = false;
         File[] children = folder.listFiles();
         if (children == null) {
@@ -783,27 +755,6 @@ class PlayerControl extends Binder
     private boolean hasTracks() {
         return state != null && state.getTracks() != null &&
             !state.getTracks().isEmpty();
-    }
-
-    /**
-     * Monitor for storage events.
-     * <p>
-     * Stops playback when the SD card is unmounted, and re-check
-     * the folder list when it's mounted (but does not resume playback).
-     */
-    private class StorageMonitor extends BroadcastReceiver {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            System.err.printf("ASHUFFLER: storage intent = %s\n", intent.getAction());
-            Log.warn("ASHUFFLER: storage intent = %s", intent.getAction());
-            if (Intent.ACTION_MEDIA_EJECT.equals(intent.getAction())) {
-                runCommand(Command.STOP_AND_SAVE);
-            } else if (intent.ACTION_MEDIA_MOUNTED.equals(intent.getAction())) {
-                runCommand(Command.STORAGE_MOUNTED);
-            }
-        }
-
     }
 
     /**
