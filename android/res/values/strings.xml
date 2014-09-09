@@ -17,5 +17,4 @@ Copyright 2012 Marcelo Vanzin
 <resources>
     <string name="app_name">Album Shuffler</string>
     <string name="notification_title">aShuffler</string>
-    <string name="not_available">SD storage not available.</string>
 </resources>

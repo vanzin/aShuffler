@@ -168,7 +168,7 @@ public class Main extends Activity
             String.format("%d.", info.getTrackNumber()));
 
         ImageView cover = (ImageView) findViewById(R.id.cover);
-        if (control.isStorageAvailable() && info.getArtwork() != null) {
+        if (info.getArtwork() != null) {
             if (!info.getArtwork().equals(currentArtwork)) {
                 Uri uri = Uri.fromFile(new File(info.getArtwork()));
                 cover.setImageURI(uri);
@@ -284,15 +284,7 @@ public class Main extends Activity
 
     private void runCommand(Command cmd) {
         if (control != null) {
-            if (!control.isStorageAvailable()) {
-                Toast toast = Toast.makeText(
-                    getApplicationContext(),
-                    R.string.not_available,
-                    Toast.LENGTH_SHORT);
-                toast.show();
-            } else {
-                control.runCommand(cmd);
-            }
+            control.runCommand(cmd);
         } else {
             Log.warn("No control.");
         }
