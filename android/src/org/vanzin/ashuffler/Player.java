@@ -135,9 +135,12 @@ public class Player {
     }
 
     public synchronized TrackInfo save() {
-        TrackInfo info = null;
-        if (isPlaying()) {
+        boolean stop = isPlaying();
+        if (stop) {
             current.pause();
+        }
+        TrackInfo info = getInfo();
+        if (stop) {
             current.stop();
         }
         return info;

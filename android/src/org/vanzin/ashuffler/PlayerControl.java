@@ -288,6 +288,7 @@ class PlayerControl extends Binder
         Player player = current.get();
         if (player != null) {
             if (!player.isValid()) {
+              releasePlayer();
               startPlayback();
             } else if (!player.playPause()) {
                 setupStopTask();
@@ -590,7 +591,10 @@ class PlayerControl extends Binder
         TrackInfo info = null;
         if (player != null) {
             info = player.save();
-            state.setTrackPosition(info.getElapsedTime());
+            if (info != null) {
+              state.setTrackPosition(info.getElapsedTime());
+            }
+            releasePlayer();
         }
         saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);
@@ -755,6 +759,13 @@ class PlayerControl extends Binder
     private boolean hasTracks() {
         return state != null && state.getTracks() != null &&
             !state.getTracks().isEmpty();
+    }
+
+    private void releasePlayer() {
+      Player p = current.getAndSet(null);
+      if (p != null) {
+        p.release();
+      }
     }
 
     /**
