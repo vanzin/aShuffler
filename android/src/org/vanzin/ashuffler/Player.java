@@ -135,14 +135,11 @@ public class Player {
     }
 
     public synchronized TrackInfo save() {
-        boolean stop = isPlaying();
-        if (stop) {
+        if (isPlaying()) {
             current.pause();
         }
         TrackInfo info = getInfo();
-        if (stop) {
-            current.stop();
-        }
+        current.stop();
         return info;
     }
 
@@ -190,9 +187,8 @@ public class Player {
             }
             info = loadInfo(track, current);
         }
-        if (isPlaying()) {
-            info.setElapsedTime(current.getCurrentPosition());
-        }
+        info.setElapsedTime(current.getCurrentPosition());
+
         // Load artwork for album.
         if (info.getArtwork() == null) {
             try {

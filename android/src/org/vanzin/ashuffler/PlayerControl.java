@@ -336,6 +336,7 @@ class PlayerControl extends Binder
         if (player != null) {
             player.stop();
             player.release();
+            current.set(null);
         }
 
         service.stopForeground(true);
@@ -343,7 +344,6 @@ class PlayerControl extends Binder
             service.stopSelf();
         }
 
-        state.setTrackPosition(0);
         saveObject(state, PlayerState.class);
         saveObject(player != null ? player.getInfo() : null,
             TrackInfo.class);
@@ -431,12 +431,13 @@ class PlayerControl extends Binder
             player.setInfo(info);
         } else {
             saveObject(null, TrackInfo.class);
+            info = null;
         }
 
         int startPos = 0;
-        if (state.getTrackPosition() > 0 &&
-            state.getTrackPosition() < player.getInfo().getDuration()) {
-            startPos = state.getTrackPosition();
+        if (info.getElapsedTime() > 0 &&
+            info.getElapsedTime() < player.getInfo().getDuration()) {
+            startPos = info.getElapsedTime();
         }
 
         player.setOnCompletionListener(this);
@@ -452,7 +453,6 @@ class PlayerControl extends Binder
 
         pausedByFocusLoss = false;
         showNotification(player);
-        state.setTrackPosition(0);
         saveObject(state, PlayerState.class);
         saveObject(player.getInfo(), TrackInfo.class);
         setNextTrack(player);
@@ -591,10 +591,8 @@ class PlayerControl extends Binder
         TrackInfo info = null;
         if (player != null) {
             info = player.save();
-            if (info != null) {
-              state.setTrackPosition(info.getElapsedTime());
-            }
             releasePlayer();
+            current.set(null);
         }
         saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);

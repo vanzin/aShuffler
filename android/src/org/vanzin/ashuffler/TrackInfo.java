@@ -37,7 +37,7 @@ class TrackInfo implements Serializable {
     private final int discNumber;
     private final int duration;
     private String artwork;
-    private transient int elapsedTime;
+    private int elapsedTime;
 
     public TrackInfo(String path, MediaMetadataRetriever md, int duration) {
         this.path = path;

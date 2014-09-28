@@ -34,10 +34,7 @@ class PlayerState implements Serializable {
     private List<String> folders;
 
     private int currentTrack;
-    private int trackPosition;
     private List<String> tracks;
-
-    private long lastModified;
 
     public int getCurrentFolder() {
         return currentFolder;
@@ -63,28 +60,12 @@ class PlayerState implements Serializable {
         this.currentTrack = currentTrack;
     }
 
-    public int getTrackPosition() {
-        return trackPosition;
-    }
-
-    public void setTrackPosition(int trackPosition) {
-        this.trackPosition = trackPosition;
-    }
-
     public List<String> getTracks() {
         return tracks;
     }
 
     public void setTracks(List<String> tracks) {
         this.tracks = tracks;
-    }
-
-    public long getLastModified() {
-        return lastModified;
-    }
-
-    public void setLastModified(long lastModified) {
-        this.lastModified = lastModified;
     }
 
 }
