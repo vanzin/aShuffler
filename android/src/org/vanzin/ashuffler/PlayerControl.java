@@ -333,8 +333,10 @@ class PlayerControl extends Binder
 
     private void stop(boolean mayStopService) {
         Player player = current.getAndSet(null);
+        TrackInfo info = null;
         if (player != null) {
             player.stop();
+            info = player.getInfo();
             player.release();
             current.set(null);
         }
@@ -345,8 +347,7 @@ class PlayerControl extends Binder
         }
 
         saveObject(state, PlayerState.class);
-        saveObject(player != null ? player.getInfo() : null,
-            TrackInfo.class);
+        saveObject(info, TrackInfo.class);
         pausedByFocusLoss = false;
         if (registeredFocusListener) {
             audioManager.abandonAudioFocus(this);
@@ -435,7 +436,8 @@ class PlayerControl extends Binder
         }
 
         int startPos = 0;
-        if (info.getElapsedTime() > 0 &&
+        if (info != null &&
+            info.getElapsedTime() > 0 &&
             info.getElapsedTime() < player.getInfo().getDuration()) {
             startPos = info.getElapsedTime();
         }
@@ -811,7 +813,11 @@ class PlayerControl extends Binder
 
         @Override
         public void run() {
-            processIntent(intent);
+            try {
+                processIntent(intent);
+            } catch (Exception e) {
+              Log.error(e, "Error processing intent.");
+            }
         }
 
     }

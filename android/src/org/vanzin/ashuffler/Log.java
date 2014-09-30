@@ -23,6 +23,11 @@ class Log {
         log(android.util.Log.DEBUG, fmt, args);
     }
 
+    static void error(Throwable t, String fmt, Object... args) {
+        String msg = String.format(fmt, args);
+        android.util.Log.e(TAG, msg, t);
+    }
+
     static void info(String fmt, Object... args) {
         log(android.util.Log.INFO, fmt, args);
     }
