@@ -174,7 +174,7 @@ public class Player {
         nextInfo = loadInfo(track, next);
         //current.setNextMediaPlayer(next);
         this.next = next;
-        this.nextTrack = nextTrack;
+        this.nextTrack = track;
     }
 
     public synchronized TrackInfo getInfo() {
@@ -187,7 +187,9 @@ public class Player {
             }
             info = loadInfo(track, current);
         }
-        info.setElapsedTime(current.getCurrentPosition());
+        if (state == State.PREPARED) {
+          info.setElapsedTime(current.getCurrentPosition());
+        }
 
         // Load artwork for album.
         if (info.getArtwork() == null) {
