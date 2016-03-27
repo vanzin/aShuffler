@@ -610,10 +610,8 @@ class PlayerControl extends Binder
         Set<String> folders = new HashSet<String>();
         findChildFolders(root, folders);
 
-        String currentFolder = state.getFolders().get(
-            state.getCurrentFolder());
-        String currentTrack = state.getTracks().get(
-            state.getCurrentTrack());
+        String currentFolder = state.currentFolder();
+        String currentTrack = state.currentTrack();
 
         // Look at the current known folders, and keep the existing
         // ones in the current order. We'll shuffle just the added
