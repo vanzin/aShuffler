@@ -31,10 +31,13 @@ Copyright 2012 Marcelo Vanzin
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-		<service android:name=".PlayerService"
-				 android:label="aShuffler Service" />
-		<receiver android:name=".RemoteControlMonitor">
-			<intent-filter android:priority="100000">
+		<service android:name=".PlayerService" android:label="aShuffler Service">
+			<intent-filter>
+				<action android:name="android.intent.action.MEDIA_BUTTON" />
+			</intent-filter>
+		</service>
+		<receiver android:name="android.support.v4.media.session.MediaButtonReceiver" >
+			<intent-filter>
 				<action android:name="android.intent.action.MEDIA_BUTTON" />
 			</intent-filter>
 		</receiver>

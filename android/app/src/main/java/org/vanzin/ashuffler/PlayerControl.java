@@ -29,7 +29,9 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.storage.StorageManager;
-import android.os.storage.StorageVolume;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
+import android.view.KeyEvent;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -61,7 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * retrieved by binding to PlayerService.
  * <p>
  * Interaction with the control is done by enqueueing commands by
- * calling {@link #runCommand(Command)}. Commands are handled
+ * calling {@link #runCommand(Command, String...)}. Commands are handled
  * sequentially in a separate worker thread, as to not block the
  * caller.
  * <p>
@@ -95,11 +97,11 @@ class PlayerControl extends Binder
     private static final String CMD_ARGS = "cmd_args";
 
     private final PlayerService service;
+    private final MediaSessionCompat session;
     private final ScheduledExecutorService executor;
     private final BroadcastReceiver headsetReceiver;
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
-    private final ComponentName remoteControl;
     private final AtomicReference<Player> current;
 
     private final NotificationManager notificationMgr;
@@ -111,7 +113,6 @@ class PlayerControl extends Binder
     private PlayerState state;
     private List<PlayerListener> listeners;
     private Future<?> stopTask;
-    private List<Uri> musicFolders;
 
     /**
      * Initializes the player control.
@@ -120,12 +121,23 @@ class PlayerControl extends Binder
      */
     public PlayerControl(PlayerService service) {
         this.service = service;
+        this.session = new MediaSessionCompat(service, "aShuffler");
         this.listeners = new LinkedList<PlayerListener>();
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
-        this.remoteControl = new ComponentName(service.getPackageName(),
-            RemoteControlMonitor.class.getName());
         this.current = new AtomicReference<Player>();
+
+        Intent intent = new Intent(service, Main.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+            service, 0, intent, 0);
+        session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS);
+        session.setSessionActivity(pendingIntent);
+        session.setPlaybackState(new PlaybackStateCompat.Builder()
+            .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0.0f)
+            .build());
+        session.setCallback(new MediaCallback());
+        session.setMediaButtonReceiver(pendingIntent);
+        session.setActive(true);
 
         // Instantiate the headset broadcast receiver.
         IntentFilter filter = new IntentFilter();
@@ -149,7 +161,6 @@ class PlayerControl extends Binder
         checkFolders();
 
         executor = Executors.newSingleThreadScheduledExecutor();
-
         notificationMgr = service.getSystemService(NotificationManager.class);
         storage = service.getSystemService(StorageManager.class);
     }
@@ -244,6 +255,7 @@ class PlayerControl extends Binder
     public static enum Command {
         NEXT_FOLDER,
         NEXT_TRACK,
+        PLAY,
         PAUSE,
         PREV_FOLDER,
         PREV_TRACK,
@@ -253,7 +265,28 @@ class PlayerControl extends Binder
         STOP,
         STOP_AND_SAVE,
         UNSET_AUDIO_FOCUS,
-        FINISH_CURRENT,
+        FINISH_CURRENT;
+
+        private final String cmd;
+
+        Command(String cmd) {
+            this.cmd = cmd;
+        }
+
+        Command() {
+            this(null);
+        }
+
+        public static Command fromAction(String action) {
+            for (Command c : values()) {
+                String cmd = c.cmd != null ? c.cmd : c.name();
+                if (cmd.equals(action)) {
+                    return c;
+                }
+            }
+            throw new IllegalArgumentException("action not found: " + action);
+        }
+
     }
 
     /**
@@ -432,7 +465,7 @@ class PlayerControl extends Binder
 
         Player player;
         try {
-            player = new Player(service, track, null, listeners);
+            player = new Player(service, session, track, null, listeners);
         } catch (IOException ioe) {
             Log.warn("Error loading player: %s", ioe.getMessage());
             return;
@@ -552,7 +585,7 @@ class PlayerControl extends Binder
     private void processIntent(Intent intent) {
         Command cmd;
         try {
-            cmd = Command.valueOf(intent.getAction());
+            cmd = Command.fromAction(intent.getAction());
         } catch (IllegalArgumentException iae) {
             Log.warn("Unknown command: %s", intent.getAction());
             return;
@@ -574,6 +607,11 @@ class PlayerControl extends Binder
             break;
         case PLAY_PAUSE:
             playPause();
+            break;
+        case PLAY:
+            if (!isPlaying()) {
+                playPause();
+            }
             break;
         case PAUSE:
             pause();
@@ -838,5 +876,40 @@ class PlayerControl extends Binder
 
     }
 
- }
+    private class MediaCallback extends MediaSessionCompat.Callback {
 
+        @Override
+        public boolean onMediaButtonEvent(Intent event) {
+            KeyEvent ke = (KeyEvent) event.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+
+            Log.debug("GOT MEDIA EVENT: %d, %s", event.hashCode(), event.getAction());
+            Log.debug(" code: %d", ke.getKeyCode());
+
+            switch (ke.getKeyCode()) {
+                case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                    runCommand(Command.PLAY_PAUSE);
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PLAY:
+                    runCommand(Command.PLAY);
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PAUSE:
+                    runCommand(Command.PAUSE);
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_STOP:
+                    runCommand(Command.STOP);
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+                    runCommand(Command.PREV_TRACK);
+                    break;
+                case KeyEvent.KEYCODE_MEDIA_NEXT:
+                    runCommand(Command.NEXT_TRACK);
+                    break;
+                default:
+                    return super.onMediaButtonEvent(event);
+            }
+            return true;
+        }
+
+    }
+
+ }

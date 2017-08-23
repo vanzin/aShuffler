@@ -15,12 +15,18 @@
  */
 package org.vanzin.ashuffler;
 
+import android.app.PendingIntent;
+import android.content.Intent;
+import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
-import android.database.Cursor;
 import android.os.PowerManager;
 import android.provider.MediaStore.Audio.Albums;
 import android.provider.MediaStore.Audio.AlbumColumns;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaButtonReceiver;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 
 import java.io.File;
 import java.io.IOException;
@@ -48,13 +54,20 @@ public class Player {
     private final MediaPlayer current;
     private final String track;
     private final PlayerService service;
+    private final MediaSessionCompat session;
+    private final PlaybackStateCompat.Builder playbackState;
+    private final MediaMetadataCompat.Builder metadata;
 
     public Player(PlayerService service,
+        MediaSessionCompat session,
         String track,
         TrackInfo info,
         List<PlayerListener> listeners) throws IOException
     {
         this.service = service;
+        this.session = session;
+        this.playbackState = new PlaybackStateCompat.Builder();
+        this.metadata = new MediaMetadataCompat.Builder();
         this.state = State.NEW;
         this.current = new MediaPlayer();
         this.current.setWakeMode(service, PowerManager.PARTIAL_WAKE_LOCK);
@@ -65,12 +78,16 @@ public class Player {
     }
 
     private Player(PlayerService service,
+        MediaSessionCompat session,
         MediaPlayer player,
         String track,
         TrackInfo info,
         List<PlayerListener> listeners)
     {
         this.service = service;
+        this.session = session;
+        this.playbackState = new PlaybackStateCompat.Builder();
+        this.metadata = new MediaMetadataCompat.Builder();
         this.current = player;
         this.track = track;
         this.info = info;
@@ -105,6 +122,7 @@ public class Player {
             current.seekTo(startPos);
         }
         current.start();
+        session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING, startPos));
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
     }
 
@@ -118,10 +136,14 @@ public class Player {
         }
         if (current.isPlaying()) {
             current.pause();
+            session.setPlaybackState(state(PlaybackStateCompat.STATE_PAUSED,
+                getInfo().getElapsedTime()));
             fireTrackStateChange(PlayerListener.TrackState.PAUSE);
             return false;
         } else {
             current.start();
+            session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING,
+                getInfo().getElapsedTime()));
             fireTrackStateChange(PlayerListener.TrackState.PLAY);
             return true;
         }
@@ -130,6 +152,7 @@ public class Player {
     public synchronized void stop() {
         if (isPlaying()) {
             current.stop();
+            session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED, 0L));
             fireTrackStateChange(PlayerListener.TrackState.STOP);
         }
     }
@@ -157,12 +180,13 @@ public class Player {
         fireTrackStateChange(PlayerListener.TrackState.COMPLETE);
 
         if (next != null) {
-            Player nextPlayer = new Player(service, next, nextTrack,
+            Player nextPlayer = new Player(service, session, next, nextTrack,
                 nextInfo, listeners);
             nextPlayer.play(0);
             return nextPlayer;
         }
 
+        session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED, 0L));
         return null;
     }
 
@@ -242,6 +266,10 @@ public class Player {
 
     public String getTrack() {
         return track;
+    }
+
+    private PlaybackStateCompat state(int state, long position) {
+        return playbackState.setState(state, position, 1.0f).build();
     }
 
     private void prepare() throws IOException {
