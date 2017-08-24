@@ -16,6 +16,7 @@
 package org.vanzin.ashuffler;
 
 import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -24,8 +25,11 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Environment;
+import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -98,12 +102,16 @@ class PlayerControl extends Binder
     private final ComponentName remoteControl;
     private final AtomicReference<Player> current;
 
+    private final NotificationManager notificationMgr;
+    private final StorageManager storage;
+
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
     private boolean serviceStarted;
     private PlayerState state;
     private List<PlayerListener> listeners;
     private Future<?> stopTask;
+    private List<Uri> musicFolders;
 
     /**
      * Initializes the player control.
@@ -141,6 +149,9 @@ class PlayerControl extends Binder
         checkFolders();
 
         executor = Executors.newSingleThreadScheduledExecutor();
+
+        notificationMgr = service.getSystemService(NotificationManager.class);
+        storage = service.getSystemService(StorageManager.class);
     }
 
     /**
@@ -465,15 +476,17 @@ class PlayerControl extends Binder
         TrackInfo info = player.getInfo();
         String msg = String.format("%s: %s - %s",
             state, info.getArtist(), info.getTitle());
-        Notification notification = new Notification(
-            R.drawable.ashuffler, msg, System.currentTimeMillis());
 
         Intent intent = new Intent(service, Main.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             service, 0, intent, 0);
-        notification.setLatestEventInfo(service,
-            service.getText(R.string.notification_title),
-            msg, pendingIntent);
+        Notification notification =
+            new Notification.Builder(service)
+                .setSmallIcon(R.drawable.ashuffler)
+                .setTicker(msg)
+                .setWhen(System.currentTimeMillis())
+                .setContentIntent(pendingIntent)
+                .build();
         service.startForeground(ONGOING_NOTIFICATION, notification);
     }
 
@@ -605,9 +618,14 @@ class PlayerControl extends Binder
     }
 
     private void checkFolders() {
-        File root = Environment.getExternalStoragePublicDirectory(
-            Environment.DIRECTORY_MUSIC);
+        Log.info("DATA: %s", Environment.getDataDirectory());
+        Log.info("EXT:  %s", Environment.getExternalStorageDirectory());
+        Log.info("ROOT: %s", Environment.getRootDirectory());
+
+
+        File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
         Set<String> folders = new HashSet<String>();
+        Log.info("Using %s as music folder (readable = %s).", root.getAbsolutePath(), root.canRead());
         findChildFolders(root, folders);
 
         String currentFolder = state.currentFolder();
