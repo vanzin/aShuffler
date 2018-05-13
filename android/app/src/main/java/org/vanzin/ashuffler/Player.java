@@ -214,22 +214,26 @@ public class Player {
         }
 
         // Load artwork for album.
-        if (info.getArtwork() == null) {
+        if (info.needArtwork()) {
             try {
-                String criteria = String.format("%s = '%s' AND %s = '%s'",
-                    AlbumColumns.ARTIST, info.getArtist(),
-                    AlbumColumns.ALBUM, info.getAlbum());
+                String criteria = String.format("%s = ? AND %s = ?",
+                    AlbumColumns.ARTIST, AlbumColumns.ALBUM);
 
                 Cursor cursor = service.getContentResolver().query(
                     Albums.EXTERNAL_CONTENT_URI,
-                    new String[] { AlbumColumns.ALBUM_ART },
+                    new String[] { Albums.ALBUM_ART },
                     criteria,
-                    null,
+                    new String[] { info.getArtist(), info.getAlbum() },
                     null);
                 if (cursor != null) {
                     try {
-                        cursor.moveToFirst();
-                        info.setArtwork(cursor.getString(0));
+                        if (cursor.moveToFirst()) {
+                            info.setArtwork(cursor.getString(0));
+                        } else {
+                            Log.info("No artwork found for %s / %s.", info.getArtist(),
+                                info.getAlbum());
+                            info.setArtwork(null);
+                        }
                     } finally {
                         cursor.close();
                     }

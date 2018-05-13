@@ -38,6 +38,7 @@ class TrackInfo implements Serializable {
     private final int duration;
     private String artwork;
     private int elapsedTime;
+    private boolean artworkIsSet;
 
     public TrackInfo(String path, MediaMetadataRetriever md, int duration) {
         this.path = path;
@@ -94,6 +95,7 @@ class TrackInfo implements Serializable {
 
     public void setArtwork(String artwork) {
         this.artwork = artwork;
+        this.artworkIsSet = true;
     }
 
     public int getElapsedTime() {
@@ -102,6 +104,10 @@ class TrackInfo implements Serializable {
 
     public void setElapsedTime(int time) {
         this.elapsedTime = time;
+    }
+
+    public boolean needArtwork() {
+        return !artworkIsSet;
     }
 
     private static int parseInt(String intish) {
