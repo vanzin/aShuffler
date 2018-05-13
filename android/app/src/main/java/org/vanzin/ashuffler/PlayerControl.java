@@ -407,6 +407,7 @@ class PlayerControl extends Binder
 
         service.stopForeground(true);
         if (mayStopService && serviceStarted) {
+            session.release();
             service.stopSelf();
         }
 
@@ -448,6 +449,10 @@ class PlayerControl extends Binder
     private void loadFolder(int delta) {
         // Check storage for changes, just in case.
         checkFolders();
+
+        if (state.getFolders().isEmpty()) {
+            return;
+        }
 
         int next = state.getCurrentFolder() + delta;
         if (next < 0) {
@@ -659,7 +664,6 @@ class PlayerControl extends Binder
         Log.info("DATA: %s", Environment.getDataDirectory());
         Log.info("EXT:  %s", Environment.getExternalStorageDirectory());
         Log.info("ROOT: %s", Environment.getRootDirectory());
-
 
         File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
         Set<String> folders = new HashSet<String>();
@@ -944,13 +948,39 @@ class PlayerControl extends Binder
 
     private class NotificationUpdater implements PlayerListener {
 
+        private final NotificationCompat.Action playAction;
+        private final NotificationCompat.Action pauseAction;
+        private final NotificationCompat.Action nextAction;
+
+        NotificationUpdater() {
+            this.playAction = createAction(R.drawable.play, "Play", Command.PLAY_PAUSE.name());
+            this.pauseAction = createAction(R.drawable.pause, "Pause", Command.PLAY_PAUSE.name());
+            this.nextAction = createAction(R.drawable.next_track, "Next",
+                Command.NEXT_TRACK.name());
+        }
+
+        private NotificationCompat.Action createAction(int icon, String label, String command) {
+            Intent intent = new Intent(service, PlayerService.class);
+            intent.setAction(command);
+            return new NotificationCompat.Action(icon, label,
+                PendingIntent.getService(service, 1, intent, 0));
+        }
+
         @Override
         public void trackStateChanged(TrackInfo track, TrackState trackState) {
-            if (trackState != TrackState.PLAY) {
-                return;
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(service);
+            switch (trackState) {
+                case PLAY:
+                    builder.addAction(pauseAction);
+                    break;
+                case PAUSE:
+                    builder.addAction(playAction);
+                    break;
+                default:
+                    return;
             }
 
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(service)
+            builder.addAction(nextAction)
                 .setContentTitle(track.getTitle())
                 .setContentText(track.getAlbum())
                 .setSubText(track.getArtist())
@@ -959,8 +989,12 @@ class PlayerControl extends Binder
                 .setContentIntent(pendingIntent)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setChannelId(notificationChannelId)
-                .setColorized(false)
-                .setStyle(new MediaStyle().setMediaSession(session.getSessionToken()));
+                .setColorized(false);
+
+            MediaStyle style = new MediaStyle()
+                .setMediaSession(session.getSessionToken())
+                .setShowActionsInCompactView(0, 1);
+            builder.setStyle(style);
 
             if (track.getArtwork() != null) {
                 Bitmap artwork = BitmapFactory.decodeFile(track.getArtwork());

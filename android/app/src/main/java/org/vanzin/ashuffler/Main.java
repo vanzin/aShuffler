@@ -15,15 +15,19 @@
  */
 package org.vanzin.ashuffler;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -46,6 +50,8 @@ public class Main extends Activity
     implements PlayerListener, ServiceConnection,
                  SeekBar.OnSeekBarChangeListener {
 
+    private static final int AS_PERM_READ_STORAGE = 0x00000101;
+
     private volatile PlayerControl control;
     private String currentArtwork;
 
@@ -65,8 +71,7 @@ public class Main extends Activity
     @Override
     protected void onStart() {
         super.onStart();
-        Intent intent = new Intent(this, PlayerService.class);
-        bindService(intent, this, Context.BIND_AUTO_CREATE);
+        checkPermissions();
     }
 
     @Override
@@ -252,6 +257,29 @@ public class Main extends Activity
                 }
             };
             progressTimer.schedule(progressTask, 1000, 1000);
+        }
+    }
+
+    private void bindToService() {
+        Intent intent = new Intent(this, PlayerService.class);
+        bindService(intent, this, Context.BIND_AUTO_CREATE);
+    }
+
+    private void checkPermissions() {
+        String perm = Manifest.permission.READ_EXTERNAL_STORAGE;
+        int permState = ContextCompat.checkSelfPermission(this, perm);
+        if (permState == PackageManager.PERMISSION_GRANTED) {
+            bindToService();
+            return;
+        }
+
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this, perm)) {
+            Log.info("Need to ask for permission interactively.");
+        } else {
+            ActivityCompat.requestPermissions(this,
+                new String[] { perm },
+                AS_PERM_READ_STORAGE);
+            bindToService();
         }
     }
 
