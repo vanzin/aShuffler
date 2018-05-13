@@ -18,6 +18,8 @@ package org.vanzin.ashuffler;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.PowerManager;
@@ -49,6 +51,7 @@ public class Player {
     private String nextTrack;
     private TrackInfo info;
     private TrackInfo nextInfo;
+    private boolean isMetadataSet;
 
     private final List<PlayerListener> listeners;
     private final MediaPlayer current;
@@ -56,7 +59,6 @@ public class Player {
     private final PlayerService service;
     private final MediaSessionCompat session;
     private final PlaybackStateCompat.Builder playbackState;
-    private final MediaMetadataCompat.Builder metadata;
 
     public Player(PlayerService service,
         MediaSessionCompat session,
@@ -67,7 +69,6 @@ public class Player {
         this.service = service;
         this.session = session;
         this.playbackState = new PlaybackStateCompat.Builder();
-        this.metadata = new MediaMetadataCompat.Builder();
         this.state = State.NEW;
         this.current = new MediaPlayer();
         this.current.setWakeMode(service, PowerManager.PARTIAL_WAKE_LOCK);
@@ -87,7 +88,6 @@ public class Player {
         this.service = service;
         this.session = session;
         this.playbackState = new PlaybackStateCompat.Builder();
-        this.metadata = new MediaMetadataCompat.Builder();
         this.current = player;
         this.track = track;
         this.info = info;
@@ -122,7 +122,7 @@ public class Player {
             current.seekTo(startPos);
         }
         current.start();
-        session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING, startPos));
+        updateSessionState(PlaybackStateCompat.STATE_PLAYING, startPos);
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
     }
 
@@ -136,14 +136,12 @@ public class Player {
         }
         if (current.isPlaying()) {
             current.pause();
-            session.setPlaybackState(state(PlaybackStateCompat.STATE_PAUSED,
-                getInfo().getElapsedTime()));
+            updateSessionState(PlaybackStateCompat.STATE_PAUSED, getInfo().getElapsedTime());
             fireTrackStateChange(PlayerListener.TrackState.PAUSE);
             return false;
         } else {
             current.start();
-            session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING,
-                getInfo().getElapsedTime()));
+            updateSessionState(PlaybackStateCompat.STATE_PLAYING, getInfo().getElapsedTime());
             fireTrackStateChange(PlayerListener.TrackState.PLAY);
             return true;
         }
@@ -152,7 +150,7 @@ public class Player {
     public synchronized void stop() {
         if (isPlaying()) {
             current.stop();
-            session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED, 0L));
+            updateSessionState(PlaybackStateCompat.STATE_STOPPED, 0L);
             fireTrackStateChange(PlayerListener.TrackState.STOP);
         }
     }
@@ -186,7 +184,7 @@ public class Player {
             return nextPlayer;
         }
 
-        session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED, 0L));
+        updateSessionState(PlaybackStateCompat.STATE_STOPPED, 0L);
         return null;
     }
 
@@ -268,8 +266,48 @@ public class Player {
         return track;
     }
 
-    private PlaybackStateCompat state(int state, long position) {
-        return playbackState.setState(state, position, 1.0f).build();
+    private void updateSessionState(int state, long position) {
+        long actions = PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
+            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+            PlaybackStateCompat.ACTION_PLAY_PAUSE;
+        switch (state) {
+            case PlaybackStateCompat.STATE_STOPPED:
+                actions |= PlaybackStateCompat.ACTION_PLAY;
+                break;
+            case PlaybackStateCompat.STATE_PAUSED:
+                actions |= PlaybackStateCompat.ACTION_PLAY |
+                    PlaybackStateCompat.ACTION_STOP;
+                break;
+            case PlaybackStateCompat.STATE_PLAYING:
+                actions |= PlaybackStateCompat.ACTION_PAUSE |
+                    PlaybackStateCompat.ACTION_STOP;
+                break;
+            default:
+        }
+
+        session.setPlaybackState(
+            playbackState
+                .setState(state, position, 1.0f)
+                .setActions(actions)
+                .build());
+
+        if (!isMetadataSet) {
+            TrackInfo info = getInfo();
+            MediaMetadataCompat.Builder mb = new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, info.getTitle())
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, info.getAlbum())
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, info.getArtist())
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, info.getDuration())
+                .putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, info.getTrackNumber());
+
+            if (info.getArtwork() != null) {
+                Bitmap artwork = BitmapFactory.decodeFile(info.getArtwork());
+                mb.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artwork);
+            }
+
+            session.setMetadata(mb.build());
+            isMetadataSet = true;
+        }
     }
 
     private void prepare() throws IOException {

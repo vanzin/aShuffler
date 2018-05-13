@@ -16,6 +16,7 @@
 package org.vanzin.ashuffler;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
@@ -23,12 +24,17 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Environment;
 import android.os.storage.StorageManager;
+import android.support.v4.app.NotificationCompat;
+import android.support.v4.media.app.NotificationCompat.MediaStyle;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.KeyEvent;
@@ -49,6 +55,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -103,9 +110,11 @@ class PlayerControl extends Binder
     private final BroadcastReceiver shutdownReceiver;
     private final AudioManager audioManager;
     private final AtomicReference<Player> current;
-
+    private final PendingIntent pendingIntent;
     private final NotificationManager notificationMgr;
     private final StorageManager storage;
+
+    private final String notificationChannelId;
 
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
@@ -127,13 +136,25 @@ class PlayerControl extends Binder
             service.getSystemService(Context.AUDIO_SERVICE);
         this.current = new AtomicReference<Player>();
 
+        // Set up the notification channel for Oreo.
+        this.notificationMgr = service.getSystemService(NotificationManager.class);
+        this.notificationChannelId = UUID.randomUUID().toString();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(notificationChannelId,
+                "aShuffler", NotificationManager.IMPORTANCE_DEFAULT);
+            channel.setDescription("aShuffler");
+            notificationMgr.createNotificationChannel(channel);
+        }
+
+        // Set up the media session.
         Intent intent = new Intent(service, Main.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-            service, 0, intent, 0);
-        session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS);
+        this.pendingIntent = PendingIntent.getActivity(service, 0, intent, 0);
+        session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
+            MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setSessionActivity(pendingIntent);
         session.setPlaybackState(new PlaybackStateCompat.Builder()
             .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0.0f)
+            .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
             .build());
         session.setCallback(new MediaCallback());
         session.setMediaButtonReceiver(pendingIntent);
@@ -151,8 +172,9 @@ class PlayerControl extends Binder
         this.shutdownReceiver = new ShutdownMonitor();
         service.registerReceiver(shutdownReceiver, filter);
 
-        // Instantiate the scrobbler.
+        // Initialize default listeners.
         addPlayerListener(new Scrobbler(service));
+        addPlayerListener(new NotificationUpdater());
 
         state = loadObject(PlayerState.class);
         if (state == null) {
@@ -161,7 +183,6 @@ class PlayerControl extends Binder
         checkFolders();
 
         executor = Executors.newSingleThreadScheduledExecutor();
-        notificationMgr = service.getSystemService(NotificationManager.class);
         storage = service.getSystemService(StorageManager.class);
     }
 
@@ -339,7 +360,6 @@ class PlayerControl extends Binder
             } else {
                 clearStopTask();
             }
-            showNotification(player);
             pausedByFocusLoss = false;
         } else {
             startPlayback();
@@ -498,29 +518,9 @@ class PlayerControl extends Binder
         }
 
         pausedByFocusLoss = false;
-        showNotification(player);
         saveObject(state, PlayerState.class);
         saveObject(player.getInfo(), TrackInfo.class);
         setNextTrack(player);
-    }
-
-    private void showNotification(Player player) {
-        String state = player.isPlaying() ? "Playing" : "Paused";
-        TrackInfo info = player.getInfo();
-        String msg = String.format("%s: %s - %s",
-            state, info.getArtist(), info.getTitle());
-
-        Intent intent = new Intent(service, Main.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-            service, 0, intent, 0);
-        Notification notification =
-            new Notification.Builder(service)
-                .setSmallIcon(R.drawable.ashuffler)
-                .setTicker(msg)
-                .setWhen(System.currentTimeMillis())
-                .setContentIntent(pendingIntent)
-                .build();
-        service.startForeground(ONGOING_NOTIFICATION, notification);
     }
 
     private void setAudioFocus(boolean focused) {
@@ -879,6 +879,36 @@ class PlayerControl extends Binder
     private class MediaCallback extends MediaSessionCompat.Callback {
 
         @Override
+        public void onPlay() {
+            Log.info("onPlay()");
+            runCommand(Command.PLAY);
+        }
+
+        @Override
+        public void onPause() {
+            Log.info("onPause()");
+            runCommand(Command.PAUSE);
+        }
+
+        @Override
+        public void onSeekTo(long pos) {
+            Log.info("onSeekTo()");
+            runCommand(Command.SEEK, String.valueOf(pos));
+        }
+
+        @Override
+        public void onSkipToNext() {
+            Log.info("onSkipToNext()");
+            runCommand(Command.NEXT_TRACK);
+        }
+
+        @Override
+        public void onSkipToPrevious() {
+            Log.info("onSkipToPrevious()");
+            runCommand(Command.PREV_TRACK);
+        }
+
+        @Override
         public boolean onMediaButtonEvent(Intent event) {
             KeyEvent ke = (KeyEvent) event.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
 
@@ -908,6 +938,36 @@ class PlayerControl extends Binder
                     return super.onMediaButtonEvent(event);
             }
             return true;
+        }
+
+    }
+
+    private class NotificationUpdater implements PlayerListener {
+
+        @Override
+        public void trackStateChanged(TrackInfo track, TrackState trackState) {
+            if (trackState != TrackState.PLAY) {
+                return;
+            }
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(service)
+                .setContentTitle(track.getTitle())
+                .setContentText(track.getAlbum())
+                .setSubText(track.getArtist())
+                .setSmallIcon(R.drawable.ashuffler)
+                .setWhen(System.currentTimeMillis())
+                .setContentIntent(pendingIntent)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setChannelId(notificationChannelId)
+                .setColorized(false)
+                .setStyle(new MediaStyle().setMediaSession(session.getSessionToken()));
+
+            if (track.getArtwork() != null) {
+                Bitmap artwork = BitmapFactory.decodeFile(track.getArtwork());
+                builder.setLargeIcon(artwork);
+            }
+
+            service.startForeground(ONGOING_NOTIFICATION, builder.build());
         }
 
     }
