@@ -55,7 +55,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,6 +101,7 @@ class PlayerControl extends Binder
 
     private static final int ONGOING_NOTIFICATION = 10001;
     private static final String CMD_ARGS = "cmd_args";
+    private static final String NOTIFICATION_CHAN_ID = "ashuffler-play-notification";
 
     private final PlayerService service;
     private final MediaSessionCompat session;
@@ -113,8 +113,6 @@ class PlayerControl extends Binder
     private final PendingIntent pendingIntent;
     private final NotificationManager notificationMgr;
     private final StorageManager storage;
-
-    private final String notificationChannelId;
 
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
@@ -138,11 +136,12 @@ class PlayerControl extends Binder
 
         // Set up the notification channel for Oreo.
         this.notificationMgr = service.getSystemService(NotificationManager.class);
-        this.notificationChannelId = UUID.randomUUID().toString();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(notificationChannelId,
-                "aShuffler", NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHAN_ID,
+                "aShuffler", NotificationManager.IMPORTANCE_LOW);
             channel.setDescription("aShuffler");
+            channel.enableLights(false);
+            channel.enableVibration(false);
             notificationMgr.createNotificationChannel(channel);
         }
 
@@ -988,7 +987,7 @@ class PlayerControl extends Binder
                 .setWhen(System.currentTimeMillis())
                 .setContentIntent(pendingIntent)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setChannelId(notificationChannelId)
+                .setChannelId(NOTIFICATION_CHAN_ID)
                 .setColorized(false);
 
             MediaStyle style = new MediaStyle()
