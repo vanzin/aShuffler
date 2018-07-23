@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Marcelo Vanzin
+ * Copyright 2013-2018 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -102,6 +102,7 @@ public class Player {
     public synchronized void pause() {
         if (current.isPlaying()) {
             current.pause();
+            updateSessionState(PlaybackStateCompat.STATE_PAUSED, getInfo().getElapsedTime());
             fireTrackStateChange(PlayerListener.TrackState.PAUSE);
         }
     }
@@ -275,16 +276,9 @@ public class Player {
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
             PlaybackStateCompat.ACTION_PLAY_PAUSE;
         switch (state) {
-            case PlaybackStateCompat.STATE_STOPPED:
-                actions |= PlaybackStateCompat.ACTION_PLAY;
-                break;
             case PlaybackStateCompat.STATE_PAUSED:
-                actions |= PlaybackStateCompat.ACTION_PLAY |
-                    PlaybackStateCompat.ACTION_STOP;
-                break;
             case PlaybackStateCompat.STATE_PLAYING:
-                actions |= PlaybackStateCompat.ACTION_PAUSE |
-                    PlaybackStateCompat.ACTION_STOP;
+                actions |= PlaybackStateCompat.ACTION_STOP;
                 break;
             default:
         }

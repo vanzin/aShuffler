@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Marcelo Vanzin
+ * Copyright 2012-2018 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -36,15 +36,8 @@ public class PlayerService extends Service {
     private PlayerControl control;
 
     @Override
-    public void onCreate() {
-    }
-
-    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         init();
-        if (intent != null && intent.getAction() != null) {
-            control.runIntent(intent);
-        }
         return START_STICKY;
     }
 
@@ -52,6 +45,7 @@ public class PlayerService extends Service {
     public void onDestroy() {
         control.shutdown();
         control = null;
+        super.onDestroy();
     }
 
     @Override

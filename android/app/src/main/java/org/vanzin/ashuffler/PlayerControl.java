@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2014 Marcelo Vanzin
+ * Copyright 2012-2018 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -116,7 +118,6 @@ class PlayerControl extends Binder
 
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
-    private boolean serviceStarted;
     private PlayerState state;
     private List<PlayerListener> listeners;
     private Future<?> stopTask;
@@ -162,6 +163,8 @@ class PlayerControl extends Binder
         // Instantiate the headset broadcast receiver.
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_HEADSET_PLUG);
+        filter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED);
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         this.headsetReceiver = new HeadsetMonitor();
         service.registerReceiver(headsetReceiver, filter);
 
@@ -210,6 +213,9 @@ class PlayerControl extends Binder
      * Stop the executor, stop playback, and save all state.
      */
     public void shutdown() {
+        audioManager.abandonAudioFocus(this);
+        session.setActive(false);
+        session.release();
         executor.shutdownNow();
         try {
             if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
@@ -236,6 +242,10 @@ class PlayerControl extends Binder
         synchronized (listeners) {
             listeners.remove(pl);
         }
+    }
+
+    public MediaSessionCompat getSession() {
+        return session;
     }
 
     private void pause() {
@@ -320,13 +330,6 @@ class PlayerControl extends Binder
         Intent intent = new Intent();
         intent.setAction(cmd.name());
         intent.putExtra(CMD_ARGS, args);
-        runIntent(intent);
-    }
-
-    /**
-     * Raw command interface. Try not to use it.
-     */
-    public void runIntent(Intent intent) {
         executor.submit(new IntentTask(intent));
     }
 
@@ -405,7 +408,7 @@ class PlayerControl extends Binder
         }
 
         service.stopForeground(true);
-        if (mayStopService && serviceStarted) {
+        if (mayStopService) {
             session.release();
             service.stopSelf();
         }
@@ -514,13 +517,6 @@ class PlayerControl extends Binder
         player.play(startPos);
         current.set(player);
 
-        // Put service in foreground.
-        if (!serviceStarted) {
-            Intent intent = new Intent(service, PlayerService.class);
-            service.startService(intent);
-            serviceStarted = true;
-        }
-
         pausedByFocusLoss = false;
         saveObject(state, PlayerState.class);
         saveObject(player.getInfo(), TrackInfo.class);
@@ -579,6 +575,9 @@ class PlayerControl extends Binder
 
     @Override
     public void onAudioFocusChange(int focusChange) {
+        if (!session.isActive()) {
+            return;
+        }
         if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
             runCommand(Command.SET_AUDIO_FOCUS);
         } else {
@@ -660,13 +659,8 @@ class PlayerControl extends Binder
     }
 
     private void checkFolders() {
-        Log.info("DATA: %s", Environment.getDataDirectory());
-        Log.info("EXT:  %s", Environment.getExternalStorageDirectory());
-        Log.info("ROOT: %s", Environment.getRootDirectory());
-
         File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
         Set<String> folders = new HashSet<String>();
-        Log.info("Using %s as music folder (readable = %s).", root.getAbsolutePath(), root.canRead());
         findChildFolders(root, folders);
 
         String currentFolder = state.currentFolder();
@@ -834,9 +828,37 @@ class PlayerControl extends Binder
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            int state = intent.getIntExtra("state", 0);
-            if (state == 0) {
-                runCommand(Command.PAUSE);
+            Command action = null;
+            switch (intent.getAction()) {
+                case Intent.ACTION_HEADSET_PLUG:
+                    int hsState = intent.getIntExtra("state", 0);
+                    if (hsState == 0) {
+                        action = Command.PAUSE;
+                    }
+                    break;
+
+                case BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED:
+                    BluetoothAdapter ba = BluetoothAdapter.getDefaultAdapter();
+                    int pState = ba.getProfileConnectionState(BluetoothProfile.A2DP);
+                    if (pState != BluetoothProfile.STATE_CONNECTED) {
+                        action = Command.PAUSE;
+                    }
+                    break;
+
+                case BluetoothAdapter.ACTION_STATE_CHANGED:
+                    int baState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,
+                        BluetoothAdapter.STATE_OFF);
+                    if (baState != BluetoothAdapter.STATE_ON) {
+                        action = Command.PAUSE;
+                    }
+                    break;
+
+                default:
+                    /* no op */
+            }
+
+            if (action != null) {
+                runCommand(action);
             }
         }
 
@@ -882,51 +904,23 @@ class PlayerControl extends Binder
     private class MediaCallback extends MediaSessionCompat.Callback {
 
         @Override
-        public void onPlay() {
-            Log.info("onPlay()");
-            runCommand(Command.PLAY);
-        }
-
-        @Override
-        public void onPause() {
-            Log.info("onPause()");
-            runCommand(Command.PAUSE);
-        }
-
-        @Override
-        public void onSeekTo(long pos) {
-            Log.info("onSeekTo()");
-            runCommand(Command.SEEK, String.valueOf(pos));
-        }
-
-        @Override
-        public void onSkipToNext() {
-            Log.info("onSkipToNext()");
-            runCommand(Command.NEXT_TRACK);
-        }
-
-        @Override
-        public void onSkipToPrevious() {
-            Log.info("onSkipToPrevious()");
-            runCommand(Command.PREV_TRACK);
-        }
-
-        @Override
         public boolean onMediaButtonEvent(Intent event) {
             KeyEvent ke = (KeyEvent) event.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
 
-            Log.debug("GOT MEDIA EVENT: %d, %s", event.hashCode(), event.getAction());
-            Log.debug(" code: %d", ke.getKeyCode());
+            if (ke.getAction() != KeyEvent.ACTION_UP || ke.isCanceled()) {
+                return true;
+            }
+
+            Log.debug("GOT MEDIA EVENT: %s", event.getAction());
+            Log.debug(" code: %d  / %d", ke.getKeyCode(), ke.getAction());
 
             switch (ke.getKeyCode()) {
                 case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                    runCommand(Command.PLAY_PAUSE);
-                    break;
                 case KeyEvent.KEYCODE_MEDIA_PLAY:
-                    runCommand(Command.PLAY);
-                    break;
                 case KeyEvent.KEYCODE_MEDIA_PAUSE:
-                    runCommand(Command.PAUSE);
+                    // The media session seems to get confused about things, so treat all these
+                    // as the same action.
+                    runCommand(Command.PLAY_PAUSE);
                     break;
                 case KeyEvent.KEYCODE_MEDIA_STOP:
                     runCommand(Command.STOP);

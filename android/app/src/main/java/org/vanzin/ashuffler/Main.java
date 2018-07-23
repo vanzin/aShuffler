@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 Marcelo Vanzin
+ * Copyright 2012-2018 Marcelo Vanzin
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -262,6 +262,7 @@ public class Main extends Activity
 
     private void bindToService() {
         Intent intent = new Intent(this, PlayerService.class);
+        startService(intent);
         bindService(intent, this, Context.BIND_AUTO_CREATE);
     }
 
