@@ -585,12 +585,12 @@ class PlayerControl extends Binder
         }
     }
 
-    private void processIntent(Intent intent) {
+    public void processIntent(Intent intent) {
         Command cmd;
         try {
             cmd = Command.fromAction(intent.getAction());
         } catch (IllegalArgumentException iae) {
-            Log.warn("Unknown command: %s", intent.getAction());
+            // Not recognized, ignore.
             return;
         }
 

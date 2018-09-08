@@ -19,6 +19,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.support.v4.media.session.MediaButtonReceiver;
 
 /**
  * Service for playing back media.
@@ -38,6 +39,8 @@ public class PlayerService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         init();
+        MediaButtonReceiver.handleIntent(control.getSession(), intent);
+        control.processIntent(intent);
         return START_STICKY;
     }
 
