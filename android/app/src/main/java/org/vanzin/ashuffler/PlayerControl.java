@@ -120,7 +120,6 @@ class PlayerControl extends Binder
     private boolean registeredFocusListener;
     private PlayerState state;
     private List<PlayerListener> listeners;
-    private Future<?> stopTask;
 
     /**
      * Initializes the player control.
@@ -252,29 +251,7 @@ class PlayerControl extends Binder
         Player player = current.get();
         if (player != null && player.isPlaying()) {
             player.pause();
-            setupStopTask();
         }
-    }
-
-    private void setupStopTask() {
-        if (stopTask != null) {
-            Log.warn("Stop task already scheduled!");
-            stopTask.cancel(false);
-        }
-
-        Intent intent = new Intent();
-        intent.setAction(Command.STOP_AND_SAVE.name());
-        stopTask = executor.schedule(new IntentTask(intent),
-            30, TimeUnit.SECONDS);
-    }
-
-    private void clearStopTask() {
-        if (stopTask == null) {
-            Log.warn("Clearing non-existant stop task.");
-            return;
-        }
-        stopTask.cancel(false);
-        stopTask = null;
     }
 
     /* Playback control. */
@@ -355,12 +332,10 @@ class PlayerControl extends Binder
         Player player = current.get();
         if (player != null) {
             if (!player.isValid()) {
-              releasePlayer();
-              startPlayback();
-            } else if (!player.playPause()) {
-                setupStopTask();
+                releasePlayer();
+                startPlayback();
             } else {
-                clearStopTask();
+                player.playPause();
             }
             pausedByFocusLoss = false;
         } else {
@@ -652,10 +627,6 @@ class PlayerControl extends Binder
         }
         saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);
-
-        if (stopTask != null) {
-            clearStopTask();
-        }
     }
 
     private void checkFolders() {
