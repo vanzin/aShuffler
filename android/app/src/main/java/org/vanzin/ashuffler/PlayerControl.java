@@ -27,10 +27,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
@@ -960,8 +958,8 @@ class PlayerControl extends Binder
                 .setShowActionsInCompactView(0, 1);
             builder.setStyle(style);
 
-            if (track.getArtwork() != null) {
-                Bitmap artwork = BitmapFactory.decodeFile(track.getArtwork());
+            Bitmap artwork = track.getArtwork();
+            if (artwork != null) {
                 builder.setLargeIcon(artwork);
             }
 

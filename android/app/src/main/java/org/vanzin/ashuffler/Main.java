@@ -23,7 +23,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.app.ActivityCompat;
@@ -34,7 +33,6 @@ import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import java.io.File;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -173,12 +171,7 @@ public class Main extends Activity
 
         ImageView cover = (ImageView) findViewById(R.id.cover);
         if (info.getArtwork() != null) {
-            if (!info.getArtwork().equals(currentArtwork)) {
-                Uri uri = Uri.fromFile(new File(info.getArtwork()));
-                cover.setImageURI(uri);
-            } else if (!new File(info.getArtwork()).exists()) {
-                cover.setImageResource(R.drawable.nocover);
-            }
+            cover.setImageBitmap(info.getArtwork());
         } else {
             cover.setImageResource(R.drawable.nocover);
         }

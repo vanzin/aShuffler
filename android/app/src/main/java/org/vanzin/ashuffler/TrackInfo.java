@@ -15,6 +15,8 @@
  */
 package org.vanzin.ashuffler;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 
 import java.io.Serializable;
@@ -27,7 +29,7 @@ import java.io.Serializable;
  */
 class TrackInfo implements Serializable {
 
-    public static final long serialVersionUID = 4735383483858487458L;
+    public static final long serialVersionUID = 4735383483858487459L;
 
     private final String path;
     private final String title;
@@ -36,9 +38,10 @@ class TrackInfo implements Serializable {
     private final int trackNumber;
     private final int discNumber;
     private final int duration;
-    private String artwork;
     private int elapsedTime;
-    private boolean artworkIsSet;
+
+    private transient Bitmap artwork;
+    private transient boolean artworkIsSet;
 
     public TrackInfo(String path, MediaMetadataRetriever md, int duration) {
         this.path = path;
@@ -89,13 +92,19 @@ class TrackInfo implements Serializable {
         return duration;
     }
 
-    public String getArtwork() {
-        return artwork;
-    }
+    public Bitmap getArtwork() {
+        if (!artworkIsSet) {
+          MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+          mmr.setDataSource(getPath());
 
-    public void setArtwork(String artwork) {
-        this.artwork = artwork;
-        this.artworkIsSet = true;
+          byte[] coverArt = mmr.getEmbeddedPicture();
+          if (coverArt != null) {
+              artwork = BitmapFactory.decodeByteArray(coverArt, 0, coverArt.length);
+          }
+        }
+
+        artworkIsSet = true;
+        return artwork;
     }
 
     public int getElapsedTime() {
@@ -104,10 +113,6 @@ class TrackInfo implements Serializable {
 
     public void setElapsedTime(int time) {
         this.elapsedTime = time;
-    }
-
-    public boolean needArtwork() {
-        return !artworkIsSet;
     }
 
     private static int parseInt(String intish) {

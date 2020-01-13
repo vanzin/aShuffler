@@ -17,14 +17,10 @@ package org.vanzin.ashuffler;
 
 import android.app.PendingIntent;
 import android.content.Intent;
-import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.PowerManager;
-import android.provider.MediaStore.Audio.Albums;
-import android.provider.MediaStore.Audio.AlbumColumns;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaButtonReceiver;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -213,39 +209,6 @@ public class Player {
         if (state == State.PREPARED) {
           info.setElapsedTime(current.getCurrentPosition());
         }
-
-        // Load artwork for album.
-        if (info.needArtwork()) {
-            try {
-                String criteria = String.format("%s = ? AND %s = ?",
-                    AlbumColumns.ARTIST, AlbumColumns.ALBUM);
-
-                Cursor cursor = service.getContentResolver().query(
-                    Albums.EXTERNAL_CONTENT_URI,
-                    new String[] { Albums.ALBUM_ART },
-                    criteria,
-                    new String[] { info.getArtist(), info.getAlbum() },
-                    null);
-                if (cursor != null) {
-                    try {
-                        if (cursor.moveToFirst()) {
-                            info.setArtwork(cursor.getString(0));
-                        } else {
-                            Log.info("No artwork found for %s / %s.", info.getArtist(),
-                                info.getAlbum());
-                            info.setArtwork(null);
-                        }
-                    } finally {
-                        cursor.close();
-                    }
-                } else {
-                    info.setArtwork(null);
-                }
-            } catch (Exception e) {
-                Log.warn("Error querying artwork: %s: %s",
-                    e.getClass().getName(), e.getMessage());
-            }
-        }
         return info;
     }
 
@@ -298,8 +261,9 @@ public class Player {
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, info.getDuration())
                 .putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, info.getTrackNumber());
 
-            if (info.getArtwork() != null) {
-                Bitmap artwork = BitmapFactory.decodeFile(info.getArtwork());
+
+            Bitmap artwork = info.getArtwork();
+            if (artwork != null) {
                 mb.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artwork);
             }
 
@@ -327,7 +291,6 @@ public class Player {
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
             md.setDataSource(track);
-            // TODO: optimize artwork retrieval.
             return new TrackInfo(track, md, mp.getDuration());
         } finally {
             md.release();
