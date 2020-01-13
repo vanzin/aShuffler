@@ -190,8 +190,8 @@ Copyright 2012 Marcelo Vanzin
 			android:layout_height="wrap_content"
 			android:layout_weight="1"
 			android:max="100"
-			android:paddingLeft="2dp"
-			android:paddingRight="2dp" />
+			android:paddingLeft="5dp"
+			android:paddingRight="5dp" />
 		<TextView
 			android:id="@+id/remaining"
 			android:layout_width="wrap_content"
@@ -199,6 +199,10 @@ Copyright 2012 Marcelo Vanzin
 			android:text=""
 			/>
 	</LinearLayout>
+
+	<Space
+		android:layout_width="match_parent"
+		android:layout_height="10dp" />
 
 </LinearLayout>
 
