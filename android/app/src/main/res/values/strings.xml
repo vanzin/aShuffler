@@ -17,4 +17,14 @@ Copyright 2012 Marcelo Vanzin
 <resources>
     <string name="app_name">Album Shuffler</string>
     <string name="notification_title">aShuffler</string>
+    <string name="view.albumCover">Album Cover</string>
+    <string name="view.artistIcon">Artist</string>
+    <string name="view.albumIcon">Album</string>
+    <string name="view.trackIcon">Track</string>
+    <string name="view.prevAlbum">Previous Album</string>
+    <string name="view.previousTrack">Previous Track</string>
+    <string name="view.playPause">Play / Pause</string>
+    <string name="view.stop">Stop</string>
+    <string name="view.nextTrack">Next Track</string>
+    <string name="view.nextAlbum">Next Album</string>
 </resources>
