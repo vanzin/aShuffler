@@ -332,8 +332,9 @@ class PlayerControl extends Binder
             if (!player.isValid()) {
                 releasePlayer();
                 startPlayback();
-            } else {
-                player.playPause();
+            } else if (!player.playPause()) {
+                saveObject(state, PlayerState.class);
+                saveObject(player.getInfo(), TrackInfo.class);
             }
             pausedByFocusLoss = false;
         } else {
@@ -538,6 +539,12 @@ class PlayerControl extends Binder
             current.set(next);
         } else {
             changeTrack(1);
+        }
+        saveObject(state, PlayerState.class);
+
+        player = current.get();
+        if (player != null) {
+            saveObject(player.getInfo(), TrackInfo.class);
         }
     }
 
