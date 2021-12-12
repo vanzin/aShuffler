@@ -91,7 +91,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * bound activities.
  * <p>
  * There are two state files kept by this class. One is the serialized
- * PlayerState, which contains the shuffled folders to be player. The
+ * PlayerState, which contains the shuffled folders to be played. The
  * other is the serialized TrackInfo, which is the current track being
  * played.
  */
@@ -176,7 +176,7 @@ class PlayerControl extends Binder
         addPlayerListener(new NotificationUpdater());
 
         state = loadObject(PlayerState.class);
-        if (state == null) {
+        if (state == null || !state.validate()) {
             state = new PlayerState();
         }
         checkFolders();

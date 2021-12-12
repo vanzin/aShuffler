@@ -15,6 +15,7 @@
  */
 package org.vanzin.ashuffler;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.LinkedList;
@@ -79,5 +80,18 @@ class PlayerState implements Serializable {
       return idx >= 0 ? tracks.get(idx) : null;
     }
 
+    public boolean validate() {
+      for (String f : folders) {
+        if (!new File(f).isDirectory()) {
+          return false;
+        }
+      }
+      for (String f : tracks) {
+        if (!new File(f).isFile()) {
+          return false;
+        }
+      }
+      return true;
+    }
 }
 

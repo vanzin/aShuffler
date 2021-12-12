@@ -19,6 +19,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 
+import java.io.File;
 import java.io.Serializable;
 
 /**
@@ -93,6 +94,10 @@ class TrackInfo implements Serializable {
     }
 
     public Bitmap getArtwork() {
+        if (!new File(path).isFile()) {
+            return null;
+        }
+
         if (!artworkIsSet) {
           MediaMetadataRetriever mmr = new MediaMetadataRetriever();
           mmr.setDataSource(getPath());

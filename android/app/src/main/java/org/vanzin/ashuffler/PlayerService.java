@@ -46,6 +46,9 @@ public class PlayerService extends Service {
 
     @Override
     public void onDestroy() {
+        if (control == null) {
+            return;
+        }
         control.shutdown();
         control = null;
         super.onDestroy();
