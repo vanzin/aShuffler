@@ -15,14 +15,12 @@
  */
 package org.vanzin.ashuffler;
 
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -33,8 +31,8 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.storage.StorageManager;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.media.app.NotificationCompat.MediaStyle;
+import androidx.core.app.NotificationCompat;
+import androidx.media.app.NotificationCompat.MediaStyle;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.KeyEvent;
@@ -56,7 +54,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -145,7 +142,8 @@ class PlayerControl extends Binder
 
         // Set up the media session.
         Intent intent = new Intent(service, Main.class);
-        this.pendingIntent = PendingIntent.getActivity(service, 0, intent, 0);
+        this.pendingIntent = PendingIntent.getActivity(service, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE);
         session.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
         session.setSessionActivity(pendingIntent);
@@ -932,7 +930,7 @@ class PlayerControl extends Binder
             Intent intent = new Intent(service, PlayerService.class);
             intent.setAction(command);
             return new NotificationCompat.Action(icon, label,
-                PendingIntent.getService(service, 1, intent, 0));
+                PendingIntent.getService(service, 1, intent, PendingIntent.FLAG_IMMUTABLE));
         }
 
         @Override

@@ -15,14 +15,11 @@
  */
 package org.vanzin.ashuffler;
 
-import android.app.PendingIntent;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
-import android.support.v4.media.session.MediaButtonReceiver;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 
