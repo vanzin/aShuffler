@@ -54,7 +54,6 @@ public class Main extends Activity
     private static final int AS_PERM_BLUETOOTH_CONNECT = 0x00000102;
 
     private volatile PlayerControl control;
-    private String currentArtwork;
 
     private Timer progressTimer;
     private TimerTask progressTask;
@@ -98,19 +97,17 @@ public class Main extends Activity
     public void onServiceConnected(ComponentName name, IBinder service) {
         control = (PlayerControl) service;
         control.addPlayerListener(this);
-        runOnUiThread(new Runnable() {
-            public void run() {
-                if (control.getCurrentInfo() != null) {
-                    setCurrentTrack(control.getCurrentInfo());
-                }
+        runOnUiThread(() -> {
+            if (control.getCurrentInfo() != null) {
+                setCurrentTrack(control.getCurrentInfo());
+            }
 
-                boolean isPlaying = control.isPlaying();
-                updatePlayControls(isPlaying);
-                updateTimes(control.getCurrentInfo() != null ?
-                    control.getCurrentInfo().getElapsedTime() : 0);
-                if (isPlaying) {
-                    setupProgressTimer();
-                }
+            boolean isPlaying = control.isPlaying();
+            updatePlayControls(isPlaying);
+            updateTimes(control.getCurrentInfo() != null ?
+                control.getCurrentInfo().getElapsedTime() : 0);
+            if (isPlaying) {
+                setupProgressTimer();
             }
         });
     }
@@ -118,20 +115,16 @@ public class Main extends Activity
     @Override
     public void onServiceDisconnected(ComponentName name) {
         control = null;
-        currentArtwork = null;
     }
 
     @Override
     public void trackStateChanged(final TrackInfo track,
                                   final TrackState trackState) {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                if (trackState == TrackState.PLAY) {
-                    setCurrentTrack(track);
-                }
-                updatePlayControls(trackState == TrackState.PLAY);
+        runOnUiThread(() -> {
+            if (trackState == TrackState.PLAY) {
+                setCurrentTrack(track);
             }
+            updatePlayControls(trackState == TrackState.PLAY);
         });
 
         if (trackState == TrackState.PLAY) {
@@ -207,12 +200,7 @@ public class Main extends Activity
     }
 
     private void updateTimesTask() {
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                updateTimes(control.getElapsedTime());
-            }
-        });
+        runOnUiThread(() -> updateTimes(control.getElapsedTime()));
     }
 
     private void updatePlayControls(boolean isPlaying) {

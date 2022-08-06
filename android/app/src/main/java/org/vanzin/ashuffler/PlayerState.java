@@ -16,7 +16,6 @@
 package org.vanzin.ashuffler;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.List;
@@ -33,10 +32,10 @@ class PlayerState implements Serializable {
     public static final long serialVersionUID = 3999248501740180351L;
 
     private int currentFolder;
-    private List<String> folders = new LinkedList<String>();
+    private final List<String> folders = new LinkedList<>();
 
     private int currentTrack;
-    private List<String> tracks = new LinkedList<String>();
+    private List<String> tracks = new LinkedList<>();
 
     public int getCurrentFolder() {
         return currentFolder < folders.size() ? currentFolder : -1;
@@ -48,10 +47,6 @@ class PlayerState implements Serializable {
 
     public List<String> getFolders() {
         return folders;
-    }
-
-    public void setFolders(List<String> folders) {
-        this.folders = folders;
     }
 
     public int getCurrentTrack() {

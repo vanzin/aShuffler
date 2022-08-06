@@ -227,10 +227,6 @@ public class Player {
         return state == State.PREPARED && current.isPlaying();
     }
 
-    public String getTrack() {
-        return track;
-    }
-
     private void updateSessionState(int state, long position) {
         long actions = PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |

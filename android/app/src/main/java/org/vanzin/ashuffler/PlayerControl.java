@@ -33,9 +33,7 @@ import android.media.AudioManager;
 import android.media.AudioFocusRequest;
 import android.media.MediaPlayer;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Environment;
-import android.os.storage.StorageManager;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
@@ -57,7 +55,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -117,13 +114,12 @@ class PlayerControl extends Binder
     private final AtomicReference<Player> current;
     private final PendingIntent pendingIntent;
     private final NotificationManager notificationMgr;
-    private final StorageManager storage;
     private final AudioFocusRequest focusRequest;
+    private final List<PlayerListener> listeners;
 
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
     private PlayerState state;
-    private List<PlayerListener> listeners;
 
     /**
      * Initializes the player control.
@@ -133,10 +129,10 @@ class PlayerControl extends Binder
     public PlayerControl(PlayerService service) {
         this.service = service;
         this.session = new MediaSessionCompat(service, "aShuffler");
-        this.listeners = new LinkedList<PlayerListener>();
+        this.listeners = new LinkedList<>();
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
-        this.current = new AtomicReference<Player>();
+        this.current = new AtomicReference<>();
 
         AudioAttributes attrs = new AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -151,14 +147,13 @@ class PlayerControl extends Binder
 
         // Set up the notification channel for Oreo.
         this.notificationMgr = service.getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHAN_ID,
-                "aShuffler", NotificationManager.IMPORTANCE_LOW);
-            channel.setDescription("aShuffler");
-            channel.enableLights(false);
-            channel.enableVibration(false);
-            notificationMgr.createNotificationChannel(channel);
-        }
+
+        NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHAN_ID,
+            "aShuffler", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("aShuffler");
+        channel.enableLights(false);
+        channel.enableVibration(false);
+        notificationMgr.createNotificationChannel(channel);
 
         // Set up the media session.
         Intent intent = new Intent(service, Main.class);
@@ -200,7 +195,6 @@ class PlayerControl extends Binder
         checkFolders();
 
         executor = Executors.newSingleThreadScheduledExecutor();
-        storage = service.getSystemService(StorageManager.class);
     }
 
     /**
@@ -275,7 +269,7 @@ class PlayerControl extends Binder
     /**
      * Commands available for enqueueing.
      */
-    public static enum Command {
+    public enum Command {
         NEXT_FOLDER,
         NEXT_TRACK,
         PLAY,
@@ -409,7 +403,7 @@ class PlayerControl extends Binder
         saveObject(info, TrackInfo.class);
         pausedByFocusLoss = false;
         if (registeredFocusListener) {
-            audioManager.abandonAudioFocus(this);
+            audioManager.abandonAudioFocusRequest(focusRequest);
             registeredFocusListener = false;
         }
     }
@@ -429,10 +423,6 @@ class PlayerControl extends Binder
         while (next >= state.getTracks().size()) {
             next -= state.getTracks().size();
             loadFolder(1);
-        }
-
-        if (next < 0) {
-            next = state.getTracks().size() + next;
         }
 
         state.setCurrentTrack(next);
@@ -651,8 +641,8 @@ class PlayerControl extends Binder
     }
 
     private void checkFolders() {
-        File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
-        Set<String> folders = new HashSet<String>();
+        File root = service.getExternalFilesDir(Environment.DIRECTORY_MUSIC);
+        Set<String> folders = new HashSet<>();
         findChildFolders(root, folders);
 
         String currentFolder = state.currentFolder();
@@ -661,15 +651,9 @@ class PlayerControl extends Binder
         // Look at the current known folders, and keep the existing
         // ones in the current order. We'll shuffle just the added
         // ones at the end of the current list.
-        for (Iterator<String> it = state.getFolders().iterator();
-             it.hasNext(); ) {
-            String folder = it.next();
-            if (!folders.remove(folder)) {
-                it.remove();
-            }
-        }
+        state.getFolders().removeIf(folder -> !folders.remove(folder));
 
-        List<String> newFolders = new ArrayList<String>(folders);
+        List<String> newFolders = new ArrayList<>(folders);
         Collections.shuffle(newFolders);
         state.getFolders().addAll(newFolders);
 
@@ -682,9 +666,8 @@ class PlayerControl extends Binder
         // track, and update the indices.
         boolean found = false;
         int idx = 0;
-        for (Iterator<String> it = state.getFolders().iterator();
-             it.hasNext(); ) {
-            if (it.next().equals(currentFolder)) {
+        for (String folder: state.getFolders()) {
+            if (folder.equals(currentFolder)) {
                 found = true;
                 break;
             }
@@ -699,9 +682,8 @@ class PlayerControl extends Binder
 
             found = false;
             idx = 0;
-            for (Iterator<String> it = tracks.iterator();
-                 it.hasNext(); ) {
-                if (it.next().equals(currentTrack)) {
+            for (String track : tracks) {
+                if (track.equals(currentTrack)) {
                     found = true;
                     break;
                 }
@@ -735,8 +717,11 @@ class PlayerControl extends Binder
     }
 
     private List<String> buildTrackList(String folder) {
-        List<String> tracks = new LinkedList<String>();
+        List<String> tracks = new LinkedList<>();
         File[] children = new File(folder).listFiles();
+        if (children == null) {
+            return tracks;
+        }
         for (File f : children) {
             if (f.isFile()) {
                 tracks.add(f.getAbsolutePath());
@@ -749,23 +734,15 @@ class PlayerControl extends Binder
     private <T extends Serializable> T loadObject(Class<T> klass) {
         String fileName = klass.getName();
 
-        InputStream in = null;
-        try {
-            in = service.openFileInput(fileName);
+        try (
+            InputStream in = service.openFileInput(fileName);
+        ){
             return (T) new ObjectInputStream(in).readObject();
         } catch (FileNotFoundException fnf) {
             return null;
         } catch (Exception e) {
             Log.info("Cannot load object from file %s: %s", fileName, e.getMessage());
             return null;
-        } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ioe) {
-                    // Ignore.
-                }
-            }
         }
     }
 
@@ -780,22 +757,14 @@ class PlayerControl extends Binder
             return;
         }
 
-        OutputStream out = null;
-        try {
-            out = service.openFileOutput(fileName, Context.MODE_PRIVATE);
+        try (
+            OutputStream out = service.openFileOutput(fileName, Context.MODE_PRIVATE);
+        ) {
             ObjectOutputStream oout = new ObjectOutputStream(out);
             oout.writeObject(object);
             oout.flush();
         } catch (Exception e) {
             Log.info("Cannot save object %s: %s", fileName, e.getMessage());
-        } finally {
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (IOException ioe) {
-                    // Ignore.
-                }
-            }
         }
     }
 
