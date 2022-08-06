@@ -28,7 +28,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.AudioFocusRequest;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
@@ -116,6 +118,7 @@ class PlayerControl extends Binder
     private final PendingIntent pendingIntent;
     private final NotificationManager notificationMgr;
     private final StorageManager storage;
+    private final AudioFocusRequest focusRequest;
 
     private boolean pausedByFocusLoss;
     private boolean registeredFocusListener;
@@ -134,6 +137,17 @@ class PlayerControl extends Binder
         this.audioManager = (AudioManager)
             service.getSystemService(Context.AUDIO_SERVICE);
         this.current = new AtomicReference<Player>();
+
+        AudioAttributes attrs = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build();
+
+        this.focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(attrs)
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener(this)
+            .build();
 
         // Set up the notification channel for Oreo.
         this.notificationMgr = service.getSystemService(NotificationManager.class);
@@ -214,7 +228,7 @@ class PlayerControl extends Binder
      * Stop the executor, stop playback, and save all state.
      */
     public void shutdown() {
-        audioManager.abandonAudioFocus(this);
+        audioManager.abandonAudioFocusRequest(focusRequest);
         session.setActive(false);
         session.release();
         executor.shutdownNow();
@@ -457,9 +471,7 @@ class PlayerControl extends Binder
 
     private void startPlayback() {
         if (!registeredFocusListener) {
-            audioManager.requestAudioFocus(this,
-                AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN);
+            audioManager.requestAudioFocus(focusRequest);
             registeredFocusListener = true;
         }
         String track = state.getTracks().get(state.getCurrentTrack());
