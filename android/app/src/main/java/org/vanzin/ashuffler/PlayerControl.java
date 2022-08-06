@@ -641,7 +641,8 @@ class PlayerControl extends Binder
     }
 
     private void checkFolders() {
-        File root = service.getExternalFilesDir(Environment.DIRECTORY_MUSIC);
+        File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
+        Log.warn("root folder: %s", root);
         Set<String> folders = new HashSet<>();
         findChildFolders(root, folders);
 
