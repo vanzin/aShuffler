@@ -33,6 +33,8 @@ import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -49,6 +51,7 @@ public class Main extends Activity
                  SeekBar.OnSeekBarChangeListener {
 
     private static final int AS_PERM_READ_STORAGE = 0x00000101;
+    private static final int AS_PERM_BLUETOOTH_CONNECT = 0x00000102;
 
     private volatile PlayerControl control;
     private String currentArtwork;
@@ -260,21 +263,21 @@ public class Main extends Activity
     }
 
     private void checkPermissions() {
-        String perm = Manifest.permission.READ_EXTERNAL_STORAGE;
-        int permState = ContextCompat.checkSelfPermission(this, perm);
-        if (permState == PackageManager.PERMISSION_GRANTED) {
-            bindToService();
-            return;
+        Map<String, Integer> perms = new HashMap<>();
+        perms.put(Manifest.permission.READ_EXTERNAL_STORAGE, AS_PERM_READ_STORAGE);
+        perms.put(Manifest.permission.BLUETOOTH_CONNECT, AS_PERM_BLUETOOTH_CONNECT);
+
+        for (Map.Entry<String, Integer> perm : perms.entrySet()) {
+            int permState = ContextCompat.checkSelfPermission(this, perm.getKey());
+            if (permState == PackageManager.PERMISSION_GRANTED) {
+                continue;
+            }
+            ActivityCompat.requestPermissions(this,
+                new String[] { perm.getKey() },
+                perm.getValue());
         }
 
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this, perm)) {
-            Log.info("Need to ask for permission interactively.");
-        } else {
-            ActivityCompat.requestPermissions(this,
-                new String[] { perm },
-                AS_PERM_READ_STORAGE);
-            bindToService();
-        }
+        bindToService();
     }
 
     /* Playback controls. */

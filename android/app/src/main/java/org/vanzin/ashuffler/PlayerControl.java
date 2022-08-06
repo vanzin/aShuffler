@@ -15,6 +15,7 @@
  */
 package org.vanzin.ashuffler;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -24,6 +25,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
@@ -31,8 +33,11 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.storage.StorageManager;
+
+import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
+
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.view.KeyEvent;
@@ -94,7 +99,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 class PlayerControl extends Binder
     implements AudioManager.OnAudioFocusChangeListener,
-               MediaPlayer.OnCompletionListener {
+    MediaPlayer.OnCompletionListener {
 
     private static final int ONGOING_NOTIFICATION = 10001;
     private static final String CMD_ARGS = "cmd_args";
@@ -574,49 +579,49 @@ class PlayerControl extends Binder
 
         String[] args = intent.getStringArrayExtra(CMD_ARGS);
         switch (cmd) {
-        case NEXT_FOLDER:
-            changeFolder(1);
-            break;
-        case NEXT_TRACK:
-            changeTrack(1);
-            break;
-        case PREV_FOLDER:
-            changeFolder(-1);
-            break;
-        case PREV_TRACK:
-            changeTrack(-1);
-            break;
-        case PLAY_PAUSE:
-            playPause();
-            break;
-        case PLAY:
-            if (!isPlaying()) {
+            case NEXT_FOLDER:
+                changeFolder(1);
+                break;
+            case NEXT_TRACK:
+                changeTrack(1);
+                break;
+            case PREV_FOLDER:
+                changeFolder(-1);
+                break;
+            case PREV_TRACK:
+                changeTrack(-1);
+                break;
+            case PLAY_PAUSE:
                 playPause();
-            }
-            break;
-        case PAUSE:
-            pause();
-            break;
-        case SEEK:
-            seek(args);
-            break;
-        case SET_AUDIO_FOCUS:
-            setAudioFocus(true);
-            break;
-        case STOP:
-            stop(true);
-            break;
-        case STOP_AND_SAVE:
-            stopAndSave();
-            break;
-        case UNSET_AUDIO_FOCUS:
-            setAudioFocus(false);
-            break;
-        case FINISH_CURRENT:
-            finishCurrentTrack();
-            break;
-        default:
-            Log.warn("Unknown command: " + cmd);
+                break;
+            case PLAY:
+                if (!isPlaying()) {
+                    playPause();
+                }
+                break;
+            case PAUSE:
+                pause();
+                break;
+            case SEEK:
+                seek(args);
+                break;
+            case SET_AUDIO_FOCUS:
+                setAudioFocus(true);
+                break;
+            case STOP:
+                stop(true);
+                break;
+            case STOP_AND_SAVE:
+                stopAndSave();
+                break;
+            case UNSET_AUDIO_FOCUS:
+                setAudioFocus(false);
+                break;
+            case FINISH_CURRENT:
+                finishCurrentTrack();
+                break;
+            default:
+                Log.warn("Unknown command: " + cmd);
         }
     }
 
@@ -644,7 +649,7 @@ class PlayerControl extends Binder
         // ones in the current order. We'll shuffle just the added
         // ones at the end of the current list.
         for (Iterator<String> it = state.getFolders().iterator();
-            it.hasNext(); ) {
+             it.hasNext(); ) {
             String folder = it.next();
             if (!folders.remove(folder)) {
                 it.remove();
@@ -665,7 +670,7 @@ class PlayerControl extends Binder
         boolean found = false;
         int idx = 0;
         for (Iterator<String> it = state.getFolders().iterator();
-            it.hasNext(); ) {
+             it.hasNext(); ) {
             if (it.next().equals(currentFolder)) {
                 found = true;
                 break;
@@ -682,7 +687,7 @@ class PlayerControl extends Binder
             found = false;
             idx = 0;
             for (Iterator<String> it = tracks.iterator();
-                it.hasNext(); ) {
+                 it.hasNext(); ) {
                 if (it.next().equals(currentTrack)) {
                     found = true;
                     break;
@@ -691,7 +696,7 @@ class PlayerControl extends Binder
             }
 
             if (found) {
-              state.setCurrentTrack(idx);
+                state.setCurrentTrack(idx);
             }
         } else {
             state.setCurrentFolder(0);
@@ -787,10 +792,10 @@ class PlayerControl extends Binder
     }
 
     private void releasePlayer() {
-      Player p = current.getAndSet(null);
-      if (p != null) {
-        p.release();
-      }
+        Player p = current.getAndSet(null);
+        if (p != null) {
+            p.release();
+        }
     }
 
     /**
@@ -812,6 +817,13 @@ class PlayerControl extends Binder
                     break;
 
                 case BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED:
+                    int permState = ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_CONNECT
+                    );
+                    if (permState != PackageManager.PERMISSION_GRANTED) {
+                        break;
+                    }
                     BluetoothAdapter ba = BluetoothAdapter.getDefaultAdapter();
                     int pState = ba.getProfileConnectionState(BluetoothProfile.A2DP);
                     if (pState != BluetoothProfile.STATE_CONNECTED) {

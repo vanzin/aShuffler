@@ -16,6 +16,8 @@ Copyright 2012 Marcelo Vanzin
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
       package="org.vanzin.ashuffler">
+
+	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 	<uses-permission android:name="android.permission.WAKE_LOCK" />
 	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 	<uses-permission android:name="android.permission.BLUETOOTH" />
