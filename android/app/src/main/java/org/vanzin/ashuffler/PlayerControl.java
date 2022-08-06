@@ -20,6 +20,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -824,7 +825,8 @@ class PlayerControl extends Binder
                     if (permState != PackageManager.PERMISSION_GRANTED) {
                         break;
                     }
-                    BluetoothAdapter ba = BluetoothAdapter.getDefaultAdapter();
+                    BluetoothManager mgr = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+                    BluetoothAdapter ba = mgr.getAdapter();
                     int pState = ba.getProfileConnectionState(BluetoothProfile.A2DP);
                     if (pState != BluetoothProfile.STATE_CONNECTED) {
                         action = Command.PAUSE;
