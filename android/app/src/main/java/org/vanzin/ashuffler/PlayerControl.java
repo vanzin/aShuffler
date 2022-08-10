@@ -55,8 +55,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -642,17 +644,27 @@ class PlayerControl extends Binder
 
     private void checkFolders() {
         File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
-        Log.warn("root folder: %s", root);
         Set<String> folders = new HashSet<>();
         findChildFolders(root, folders);
 
-        String currentFolder = state.currentFolder();
-        String currentTrack = state.currentTrack();
+        boolean foundCurrent = false;
+        int currentFolderIdx = -1;
 
         // Look at the current known folders, and keep the existing
         // ones in the current order. We'll shuffle just the added
         // ones at the end of the current list.
-        state.getFolders().removeIf(folder -> !folders.remove(folder));
+        for (Iterator<String> it = state.getFolders().iterator(); it.hasNext(); ) {
+            String folder = it.next();
+            boolean onDisk = folders.remove(folder);
+            if (!onDisk) {
+                it.remove();
+            }
+
+            if (!foundCurrent) {
+                currentFolderIdx++;
+                foundCurrent = Objects.equals(folder, state.currentFolder());
+            }
+        }
 
         List<String> newFolders = new ArrayList<>(folders);
         Collections.shuffle(newFolders);
@@ -663,42 +675,19 @@ class PlayerControl extends Binder
             return;
         }
 
-        // Find the current folder in the new list, and the current
-        // track, and update the indices.
-        boolean found = false;
-        int idx = 0;
-        for (String folder: state.getFolders()) {
-            if (folder.equals(currentFolder)) {
-                found = true;
-                break;
-            }
-            idx++;
-        }
-
-        if (found) {
-            state.setCurrentFolder(idx);
-            List<String> tracks = buildTrackList(
-                state.getFolders().get(idx));
-            state.setTracks(tracks);
-
-            found = false;
-            idx = 0;
-            for (String track : tracks) {
-                if (track.equals(currentTrack)) {
-                    found = true;
-                    break;
-                }
-                idx++;
-            }
-
-            if (found) {
-                state.setCurrentTrack(idx);
-            }
+        int trackIdx = 0;
+        if (!foundCurrent) {
+            currentFolderIdx = 0;
         } else {
-            state.setCurrentFolder(0);
-            state.setCurrentTrack(0);
-            loadFolder(0);
+            trackIdx = state.getFolders().get(currentFolderIdx).indexOf(state.getCurrentTrack());
+            if (trackIdx < 0) {
+                trackIdx = 0;
+            }
         }
+
+        state.setCurrentFolder(currentFolderIdx);
+        state.setTracks(buildTrackList(state.getFolders().get(currentFolderIdx)));
+        state.setCurrentTrack(trackIdx);
     }
 
     private void findChildFolders(File folder, Collection<String> folders) {

@@ -283,6 +283,7 @@ public class Player {
     private TrackInfo loadInfo(String track, MediaPlayer mp) {
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
+            Log.warn("track: %s", track);
             md.setDataSource(track);
             return new TrackInfo(track, md, mp.getDuration());
         } finally {

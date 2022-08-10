@@ -121,6 +121,9 @@ class TrackInfo implements Serializable {
     }
 
     private static int parseInt(String intish) {
+        if (intish == null) {
+            return 1;
+        }
         int idx = intish.indexOf("/");
         if (idx == -1) {
             idx = intish.indexOf("-");
