@@ -353,8 +353,7 @@ class PlayerControl extends Binder
             return;
         }
 
-        saveObject(state, PlayerState.class);
-        saveObject(player.getInfo(), TrackInfo.class);
+        saveState();
         player.playPause();
         pausedByFocusLoss = false;
     }
@@ -417,7 +416,12 @@ class PlayerControl extends Binder
     }
 
     private void changeTrack(int delta) {
-        boolean useNextTrack = delta == 1;
+        Player player = current.getAndSet(null);
+        Player nextPlayer = null;
+        if (player != null) {
+            nextPlayer = player.release();
+        }
+
         int next = state.getCurrentTrack() + delta;
         while (next < 0) {
             loadFolder(-1);
@@ -426,23 +430,15 @@ class PlayerControl extends Binder
         while (next >= state.getTracks().size()) {
             next -= state.getTracks().size();
             loadFolder(1);
-            useNextTrack = false;
+            if (nextPlayer != null ) {
+                nextPlayer.release();
+                nextPlayer = null;
+            }
         }
 
         state.setCurrentTrack(next);
 
-        Log.info("stopping current track...");
-        Player player = current.getAndSet(null);
-        if (player == null) {
-            startPlayback();
-            return;
-        }
-
-        Player nextPlayer = player.release();
-        if (nextPlayer == null || !useNextTrack) {
-            if (nextPlayer != null) {
-                nextPlayer.release();
-            }
+        if (nextPlayer == null) {
             startPlayback();
             return;
         }
@@ -489,6 +485,7 @@ class PlayerControl extends Binder
             registeredFocusListener = true;
         }
         String track = state.getTracks().get(state.getCurrentTrack());
+
         if (!new File(track).isFile()) {
             checkFolders();
             track = state.getTracks().get(state.getCurrentTrack());
@@ -547,7 +544,6 @@ class PlayerControl extends Binder
         try {
             String nextPath = state.getTracks().get(nextIdx);
             player.setNext(nextPath);
-            Log.info("next track: %s", nextPath);
         } catch (IOException ioe) {
             Log.warn("Failed to initialize next track: %s",
                 ioe.getMessage());
@@ -558,6 +554,7 @@ class PlayerControl extends Binder
         TrackInfo info = getCurrentInfo();
         saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);
+        Log.info("saved, current = %d", state.getCurrentTrack());
     }
 
     @Override
@@ -665,18 +662,18 @@ class PlayerControl extends Binder
             return;
         }
 
+        String currentTrack = state.currentTrack();
+
+        state.setCurrentFolder(currentFolderIdx);
+        state.setTracks(buildTrackList(state.currentFolder()));
+
         int trackIdx = 0;
-        if (!foundCurrent) {
-            currentFolderIdx = 0;
-        } else {
-            trackIdx = state.getFolders().get(currentFolderIdx).indexOf(state.getCurrentTrack());
+        if (currentTrack != null) {
+            trackIdx = state.getTracks().indexOf(currentTrack);
             if (trackIdx < 0) {
                 trackIdx = 0;
             }
         }
-
-        state.setCurrentFolder(currentFolderIdx);
-        state.setTracks(buildTrackList(state.getFolders().get(currentFolderIdx)));
         state.setCurrentTrack(trackIdx);
     }
 
