@@ -120,24 +120,21 @@ public class Player {
         fireTrackStateChange(PlayerListener.TrackState.PLAY);
     }
 
-    public synchronized boolean playPause() {
+    public synchronized void playPause() {
         try {
             prepare();
         } catch (IOException ioe) {
             Log.warn("Error preparing playback: %s",
                 ioe.getMessage());
-            return false;
         }
         if (current.isPlaying()) {
             current.pause();
             updateSessionState(PlaybackStateCompat.STATE_PAUSED, getInfo().getElapsedTime());
             fireTrackStateChange(PlayerListener.TrackState.PAUSE);
-            return false;
         } else {
             current.start();
             updateSessionState(PlaybackStateCompat.STATE_PLAYING, getInfo().getElapsedTime());
             fireTrackStateChange(PlayerListener.TrackState.PLAY);
-            return true;
         }
     }
 
@@ -149,15 +146,6 @@ public class Player {
         }
     }
 
-    public synchronized TrackInfo save() {
-        if (isPlaying()) {
-            current.pause();
-        }
-        TrackInfo info = getInfo();
-        current.stop();
-        return info;
-    }
-
     public synchronized Player release() {
         stop();
         current.release();
@@ -167,22 +155,6 @@ public class Player {
             return new Player(service, session, next, nextTrack,
                 nextInfo, listeners);
         }
-        return null;
-    }
-
-    public synchronized Player complete() {
-        current.release();
-        state = State.RELEASED;
-        fireTrackStateChange(PlayerListener.TrackState.COMPLETE);
-
-        if (next != null) {
-            Player nextPlayer = new Player(service, session, next, nextTrack,
-                nextInfo, listeners);
-            nextPlayer.play(0);
-            return nextPlayer;
-        }
-
-        updateSessionState(PlaybackStateCompat.STATE_STOPPED, 0L);
         return null;
     }
 
@@ -210,10 +182,6 @@ public class Player {
           info.setElapsedTime(current.getCurrentPosition());
         }
         return info;
-    }
-
-    public synchronized void setInfo(TrackInfo info) {
-        this.info = info;
     }
 
     public synchronized void seekTo(int newPos) {

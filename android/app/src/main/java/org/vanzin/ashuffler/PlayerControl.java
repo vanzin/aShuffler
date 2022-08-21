@@ -238,7 +238,7 @@ class PlayerControl extends Binder
         }
 
         if (current.get() != null) {
-            stopAndSave();
+            stop();
         }
         service.unregisterReceiver(headsetReceiver);
         service.unregisterReceiver(shutdownReceiver);
@@ -283,7 +283,6 @@ class PlayerControl extends Binder
         SEEK,
         SET_AUDIO_FOCUS,
         STOP,
-        STOP_AND_SAVE,
         UNSET_AUDIO_FOCUS,
         FINISH_CURRENT;
 
@@ -450,8 +449,7 @@ class PlayerControl extends Binder
 
         current.set(nextPlayer);
         nextPlayer.setOnCompletionListener(this);
-        saveObject(player.getInfo(), TrackInfo.class);
-        saveObject(state, PlayerState.class);
+        saveState();
         nextPlayer.play(0);
         setNextTrack(player);
     }
@@ -504,10 +502,9 @@ class PlayerControl extends Binder
             return;
         }
 
-        TrackInfo info = player.getInfo();
-        saveObject(info, TrackInfo.class);
-        saveObject(state, PlayerState.class);
+        saveState();
 
+        TrackInfo info = getCurrentInfo();
         int startPos = 0;
         if (info != null &&
             info.getElapsedTime() > 0 &&
@@ -555,6 +552,12 @@ class PlayerControl extends Binder
             Log.warn("Failed to initialize next track: %s",
                 ioe.getMessage());
         }
+    }
+
+    private void saveState() {
+        TrackInfo info = getCurrentInfo();
+        saveObject(info, TrackInfo.class);
+        saveObject(state, PlayerState.class);
     }
 
     @Override
@@ -618,9 +621,6 @@ class PlayerControl extends Binder
                 stop();
                 stopService();
                 break;
-            case STOP_AND_SAVE:
-                stopAndSave();
-                break;
             case UNSET_AUDIO_FOCUS:
                 setAudioFocus(false);
                 break;
@@ -630,18 +630,6 @@ class PlayerControl extends Binder
             default:
                 Log.warn("Unknown command: " + cmd);
         }
-    }
-
-    private void stopAndSave() {
-        Player player = current.get();
-        TrackInfo info = null;
-        if (player != null) {
-            info = player.save();
-            releasePlayer();
-            current.set(null);
-        }
-        saveObject(info, TrackInfo.class);
-        saveObject(state, PlayerState.class);
     }
 
     private void checkFolders() {
@@ -835,7 +823,7 @@ class PlayerControl extends Binder
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            runCommand(Command.STOP_AND_SAVE);
+            runCommand(Command.STOP);
         }
 
     }
@@ -866,7 +854,7 @@ class PlayerControl extends Binder
 
         @Override
         public boolean onMediaButtonEvent(Intent event) {
-            KeyEvent ke = (KeyEvent) event.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+            KeyEvent ke = event.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
 
             if (ke.getAction() != KeyEvent.ACTION_UP || ke.isCanceled()) {
                 return true;
