@@ -34,7 +34,9 @@ Copyright 2012 Marcelo Vanzin
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-		<service android:name=".PlayerService" android:label="aShuffler Service" />
+		<service android:name=".PlayerService"
+				 android:label="aShuffler Service"
+				 android:foregroundServiceType="mediaPlayback" />
 		<receiver android:name="androidx.media.session.MediaButtonReceiver"
 			      android:exported="true">
 			<intent-filter>

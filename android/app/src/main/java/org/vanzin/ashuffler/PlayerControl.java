@@ -27,6 +27,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
@@ -342,18 +343,21 @@ class PlayerControl extends Binder
         }
 
         Player player = current.get();
-        if (player != null) {
-            if (!player.isValid()) {
-                releasePlayer();
-                startPlayback();
-            } else if (!player.playPause()) {
-                saveObject(state, PlayerState.class);
-                saveObject(player.getInfo(), TrackInfo.class);
-            }
-            pausedByFocusLoss = false;
-        } else {
+        if (player == null) {
             startPlayback();
+            return;
         }
+
+        if (!player.isValid()) {
+            releasePlayer();
+            startPlayback();
+            return;
+        }
+
+        saveObject(state, PlayerState.class);
+        saveObject(player.getInfo(), TrackInfo.class);
+        player.playPause();
+        pausedByFocusLoss = false;
     }
 
     private void seek(String[] args) {
@@ -385,20 +389,17 @@ class PlayerControl extends Binder
         player.seekTo(newPos);
     }
 
-    private void stop(boolean mayStopService) {
-        Player player = current.getAndSet(null);
-        TrackInfo info = null;
-        if (player != null) {
-            player.stop();
-            info = player.getInfo();
-            player.release();
-            current.set(null);
-        }
-
+    private void stopService() {
         service.stopForeground(true);
-        if (mayStopService) {
-            session.release();
-            service.stopSelf();
+        session.release();
+        service.stopSelf();
+    }
+
+    private void stop() {
+        TrackInfo info = getCurrentInfo();
+        releasePlayer();
+        if (info != null) {
+            info.setElapsedTime(0);
         }
 
         saveObject(state, PlayerState.class);
@@ -411,12 +412,13 @@ class PlayerControl extends Binder
     }
 
     private void changeFolder(int delta) {
+        stop();
         loadFolder(delta);
-        stop(false);
         startPlayback();
     }
 
     private void changeTrack(int delta) {
+        boolean useNextTrack = delta == 1;
         int next = state.getCurrentTrack() + delta;
         while (next < 0) {
             loadFolder(-1);
@@ -425,11 +427,33 @@ class PlayerControl extends Binder
         while (next >= state.getTracks().size()) {
             next -= state.getTracks().size();
             loadFolder(1);
+            useNextTrack = false;
         }
 
         state.setCurrentTrack(next);
-        stop(false);
-        startPlayback();
+
+        Log.info("stopping current track...");
+        Player player = current.getAndSet(null);
+        if (player == null) {
+            startPlayback();
+            return;
+        }
+
+        Player nextPlayer = player.release();
+        if (nextPlayer == null || !useNextTrack) {
+            if (nextPlayer != null) {
+                nextPlayer.release();
+            }
+            startPlayback();
+            return;
+        }
+
+        current.set(nextPlayer);
+        nextPlayer.setOnCompletionListener(this);
+        saveObject(player.getInfo(), TrackInfo.class);
+        saveObject(state, PlayerState.class);
+        nextPlayer.play(0);
+        setNextTrack(player);
     }
 
     private void loadFolder(int delta) {
@@ -480,13 +504,9 @@ class PlayerControl extends Binder
             return;
         }
 
-        TrackInfo info = loadObject(TrackInfo.class);
-        if (info != null && track.equals(info.getPath())) {
-            player.setInfo(info);
-        } else {
-            saveObject(null, TrackInfo.class);
-            info = null;
-        }
+        TrackInfo info = player.getInfo();
+        saveObject(info, TrackInfo.class);
+        saveObject(state, PlayerState.class);
 
         int startPos = 0;
         if (info != null &&
@@ -495,13 +515,11 @@ class PlayerControl extends Binder
             startPos = info.getElapsedTime();
         }
 
+        pausedByFocusLoss = false;
         player.setOnCompletionListener(this);
         player.play(startPos);
         current.set(player);
 
-        pausedByFocusLoss = false;
-        saveObject(state, PlayerState.class);
-        saveObject(player.getInfo(), TrackInfo.class);
         setNextTrack(player);
     }
 
@@ -525,34 +543,17 @@ class PlayerControl extends Binder
     private void setNextTrack(Player player) {
         int nextIdx = state.getCurrentTrack() + 1;
         if (nextIdx >= state.getTracks().size()) {
+            Log.info("last track in album");
             return;
         }
 
         try {
             String nextPath = state.getTracks().get(nextIdx);
             player.setNext(nextPath);
+            Log.info("next track: %s", nextPath);
         } catch (IOException ioe) {
             Log.warn("Failed to initialize next track: %s",
                 ioe.getMessage());
-        }
-    }
-
-    private void finishCurrentTrack() {
-        Player player = current.getAndSet(null);
-        Player next = player.complete();
-        if (next != null) {
-            state.setCurrentTrack(state.getCurrentTrack() + 1);
-            next.setOnCompletionListener(this);
-            setNextTrack(next);
-            current.set(next);
-        } else {
-            changeTrack(1);
-        }
-        saveObject(state, PlayerState.class);
-
-        player = current.get();
-        if (player != null) {
-            saveObject(player.getInfo(), TrackInfo.class);
         }
     }
 
@@ -614,7 +615,8 @@ class PlayerControl extends Binder
                 setAudioFocus(true);
                 break;
             case STOP:
-                stop(true);
+                stop();
+                stopService();
                 break;
             case STOP_AND_SAVE:
                 stopAndSave();
@@ -623,7 +625,7 @@ class PlayerControl extends Binder
                 setAudioFocus(false);
                 break;
             case FINISH_CURRENT:
-                finishCurrentTrack();
+                changeTrack(1);
                 break;
             default:
                 Log.warn("Unknown command: " + cmd);
@@ -765,8 +767,8 @@ class PlayerControl extends Binder
 
     private void releasePlayer() {
         Player p = current.getAndSet(null);
-        if (p != null) {
-            p.release();
+        while (p != null) {
+            p = p.release();
         }
     }
 
@@ -953,7 +955,8 @@ class PlayerControl extends Binder
                 builder.setLargeIcon(artwork);
             }
 
-            service.startForeground(ONGOING_NOTIFICATION, builder.build());
+            service.startForeground(ONGOING_NOTIFICATION, builder.build(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         }
 
     }

@@ -158,12 +158,16 @@ public class Player {
         return info;
     }
 
-    public synchronized void release() {
+    public synchronized Player release() {
+        stop();
         current.release();
-        if (next != null) {
-            next.release();
-        }
         state = State.RELEASED;
+
+        if (next != null) {
+            return new Player(service, session, next, nextTrack,
+                nextInfo, listeners);
+        }
+        return null;
     }
 
     public synchronized Player complete() {
@@ -188,7 +192,6 @@ public class Player {
         next.setDataSource(track);
         next.prepare();
         nextInfo = loadInfo(track, next);
-        //current.setNextMediaPlayer(next);
         this.next = next;
         this.nextTrack = track;
     }
@@ -283,7 +286,6 @@ public class Player {
     private TrackInfo loadInfo(String track, MediaPlayer mp) {
         MediaMetadataRetriever md = new MediaMetadataRetriever();
         try {
-            Log.warn("track: %s", track);
             md.setDataSource(track);
             return new TrackInfo(track, md, mp.getDuration());
         } finally {
