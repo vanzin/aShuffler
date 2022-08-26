@@ -558,7 +558,6 @@ class PlayerControl extends Binder
         TrackInfo info = getCurrentInfo();
         saveObject(info, TrackInfo.class);
         saveObject(state, PlayerState.class);
-        Log.info("saved, current = %d", state.getCurrentTrack());
     }
 
     @Override
