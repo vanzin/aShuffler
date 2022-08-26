@@ -421,6 +421,10 @@ class PlayerControl extends Binder
         if (player != null) {
             nextPlayer = player.release();
         }
+        if (delta != 1 && nextPlayer != null) {
+            nextPlayer.release();
+            nextPlayer = null;
+        }
 
         int next = state.getCurrentTrack() + delta;
         while (next < 0) {
@@ -589,6 +593,7 @@ class PlayerControl extends Binder
                 changeFolder(1);
                 break;
             case NEXT_TRACK:
+            case FINISH_CURRENT:
                 changeTrack(1);
                 break;
             case PREV_FOLDER:
@@ -620,9 +625,6 @@ class PlayerControl extends Binder
                 break;
             case UNSET_AUDIO_FOCUS:
                 setAudioFocus(false);
-                break;
-            case FINISH_CURRENT:
-                changeTrack(1);
                 break;
             default:
                 Log.warn("Unknown command: " + cmd);
