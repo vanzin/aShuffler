@@ -665,6 +665,11 @@ class PlayerControl extends Binder
 
         String currentTrack = state.currentTrack();
 
+        if (!foundCurrent) {
+            currentFolderIdx = 0;
+            currentTrack = null;
+        }
+
         state.setCurrentFolder(currentFolderIdx);
         state.setTracks(buildTrackList(state.currentFolder()));
 
