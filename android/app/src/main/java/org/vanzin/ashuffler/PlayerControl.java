@@ -503,6 +503,7 @@ class PlayerControl extends Binder
             return;
         }
 
+        current.set(player);
         saveState();
 
         TrackInfo info = getCurrentInfo();
@@ -516,7 +517,6 @@ class PlayerControl extends Binder
         pausedByFocusLoss = false;
         player.setOnCompletionListener(this);
         player.play(startPos);
-        current.set(player);
 
         setNextTrack(player);
     }
